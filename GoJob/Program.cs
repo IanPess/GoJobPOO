@@ -36,6 +36,7 @@ todosApi.MapGet("/{id}", Results<Ok<Todo>, NotFound> (int id) =>
         ? TypedResults.Ok(todo)
         : TypedResults.NotFound())
     .WithName("GetTodoById");
+app.UseStaticFiles();
 
 app.Run();
 

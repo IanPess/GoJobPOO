@@ -8,6 +8,7 @@
 
 <!-- Fontes -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Lexend:wght@500;600;700;800&display=swap" rel="stylesheet">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
@@ -215,177 +216,176 @@
 </div>
 
 <!-- ===================== MODAL: AUTENTICAÇÃO ===================== -->
-<div class="modal-overlay is-hidden" id="modal-auth" role="dialog" aria-modal="true" aria-labelledby="auth-panel-title">
-  <div class="modal modal--auth">
-    <button type="button" class="modal__close" data-close-modal aria-label="Fechar">
-      <i data-lucide="x"></i>
-    </button>
+<div class="modal-overlay is-hidden" id="modal-auth" role="dialog" aria-modal="true" data-lenis-prevent>
+    <div class="modal modal--auth">
+        <button type="button" class="modal__close" data-close-modal aria-label="Fechar">
+            <i data-lucide="x"></i>
+        </button>
 
-    <div class="modal__tabs" role="tablist" aria-label="Tipo de acesso">
-      <button type="button" class="modal__tab" data-tab="login" role="tab">Entrar</button>
-      <button type="button" class="modal__tab" data-tab="cliente" role="tab">Sou cliente</button>
-      <button type="button" class="modal__tab" data-tab="profissional" role="tab">Sou profissional</button>
+        <div class="modal__tabs" role="tablist" aria-label="Tipo de acesso">
+            <button type="button" class="modal__tab" data-tab="login" role="tab">Entrar</button>
+            <button type="button" class="modal__tab" data-tab="cliente" role="tab">Sou cliente</button>
+            <button type="button" class="modal__tab" data-tab="profissional" role="tab">Sou profissional</button>
+        </div>
+
+        <h2 class="modal__title" id="auth-panel-title">Entrar na sua conta</h2>
+
+        <!-- LOGIN -->
+        <form class="auth-panel" data-panel="login" id="form-login">
+            <div class="field">
+                <label for="login-email">E-mail</label>
+                <input type="email" id="login-email" name="email" required autocomplete="email">
+            </div>
+            <div class="field">
+                <label for="login-senha">Senha</label>
+                <input type="password" id="login-senha" name="senha" required autocomplete="current-password" minlength="6">
+            </div>
+            <button type="submit" class="btn btn--primary btn--full">Entrar</button>
+        </form>
+
+        <!-- CADASTRO CLIENTE -->
+        <form class="auth-panel" data-panel="cliente" id="form-cadastro-cliente">
+            <input type="hidden" name="tipoUsuario" value="CLIENTE">
+            <div class="field">
+                <label for="cliente-nome">Nome completo</label>
+                <input type="text" id="cliente-nome" name="nome" required>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label for="cliente-email">E-mail</label>
+                    <input type="email" id="cliente-email" name="email" required>
+                    <span class="field__hint" data-hint="email">O e-mail não pode estar em uso na plataforma (RN01).</span>
+                </div>
+                <div class="field">
+                    <label for="cliente-telefone">Telefone</label>
+                    <input type="tel" id="cliente-telefone" name="telefone" required placeholder="(00) 00000-0000">
+                </div>
+            </div>
+            <div class="field">
+                <label for="cliente-senha">Senha</label>
+                <input type="password" id="cliente-senha" name="senha" required minlength="6">
+                <span class="field__hint">Mínimo de 6 caracteres. Armazenada com hash (bcrypt).</span>
+            </div>
+            <button type="submit" class="btn btn--primary btn--full">Criar conta de cliente</button>
+        </form>
+
+        <!-- CADASTRO PROFISSIONAL -->
+        <form class="auth-panel" data-panel="profissional" id="form-cadastro-profissional">
+            <input type="hidden" name="tipoUsuario" value="PROFISSIONAL">
+            <div class="field">
+                <label for="pro-nome">Nome completo</label>
+                <input type="text" id="pro-nome" name="nome" required>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label for="pro-email">E-mail</label>
+                    <input type="email" id="pro-email" name="email" required>
+                    <span class="field__hint" data-hint="email">O e-mail não pode estar em uso na plataforma (RN01).</span>
+                </div>
+                <div class="field">
+                    <label for="pro-telefone">Telefone</label>
+                    <input type="tel" id="pro-telefone" name="telefone" required placeholder="(00) 00000-0000">
+                </div>
+            </div>
+            <div class="field">
+                <label for="pro-senha">Senha</label>
+                <input type="password" id="pro-senha" name="senha" required minlength="6">
+            </div>
+
+            <div class="field">
+                <span class="field__label-standalone">Categorias de atuação <span class="field__optional">(até 3 — RN05)</span></span>
+                <div class="checkbox-grid" id="pro-categorias-grid">
+                    <!-- checkboxes inseridos via JS -->
+                </div>
+                <span class="field__hint field__hint--error is-hidden" id="pro-categorias-erro">Selecione no máximo 3 categorias.</span>
+            </div>
+
+            <div class="field-row">
+                <div class="field">
+                    <label for="pro-cidade">Cidade</label>
+                    <input type="text" id="pro-cidade" name="cidade" required>
+                </div>
+                <div class="field">
+                    <label for="pro-bairro">Bairro</label>
+                    <input type="text" id="pro-bairro" name="bairro" required>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn--primary btn--full">Criar conta de profissional</button>
+        </form>
     </div>
-
-    <h2 class="modal__title" id="auth-panel-title">Entrar na sua conta</h2>
-
-    <!-- LOGIN -->
-    <form class="auth-panel" data-panel="login" id="form-login">
-      <div class="field">
-        <label for="login-email">E-mail</label>
-        <input type="email" id="login-email" name="email" required autocomplete="email">
-      </div>
-      <div class="field">
-        <label for="login-senha">Senha</label>
-        <input type="password" id="login-senha" name="senha" required autocomplete="current-password" minlength="6">
-      </div>
-      <button type="submit" class="btn btn--primary btn--full">Entrar</button>
-    </form>
-
-    <!-- CADASTRO CLIENTE -->
-    <form class="auth-panel" data-panel="cliente" id="form-cadastro-cliente">
-      <input type="hidden" name="tipoUsuario" value="CLIENTE">
-      <div class="field">
-        <label for="cliente-nome">Nome completo</label>
-        <input type="text" id="cliente-nome" name="nome" required>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label for="cliente-email">E-mail</label>
-          <input type="email" id="cliente-email" name="email" required>
-          <span class="field__hint" data-hint="email">O e-mail não pode estar em uso na plataforma (RN01).</span>
-        </div>
-        <div class="field">
-          <label for="cliente-telefone">Telefone</label>
-          <input type="tel" id="cliente-telefone" name="telefone" required placeholder="(00) 00000-0000">
-        </div>
-      </div>
-      <div class="field">
-        <label for="cliente-senha">Senha</label>
-        <input type="password" id="cliente-senha" name="senha" required minlength="6">
-        <span class="field__hint">Mínimo de 6 caracteres. Armazenada com hash (bcrypt).</span>
-      </div>
-      <button type="submit" class="btn btn--primary btn--full">Criar conta de cliente</button>
-    </form>
-
-    <!-- CADASTRO PROFISSIONAL -->
-    <form class="auth-panel" data-panel="profissional" id="form-cadastro-profissional">
-      <input type="hidden" name="tipoUsuario" value="PROFISSIONAL">
-      <div class="field">
-        <label for="pro-nome">Nome completo</label>
-        <input type="text" id="pro-nome" name="nome" required>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label for="pro-email">E-mail</label>
-          <input type="email" id="pro-email" name="email" required>
-          <span class="field__hint" data-hint="email">O e-mail não pode estar em uso na plataforma (RN01).</span>
-        </div>
-        <div class="field">
-          <label for="pro-telefone">Telefone</label>
-          <input type="tel" id="pro-telefone" name="telefone" required placeholder="(00) 00000-0000">
-        </div>
-      </div>
-      <div class="field">
-        <label for="pro-senha">Senha</label>
-        <input type="password" id="pro-senha" name="senha" required minlength="6">
-      </div>
-
-      <div class="field">
-        <span class="field__label-standalone">Categorias de atuação <span class="field__optional">(até 3 — RN05)</span></span>
-        <div class="checkbox-grid" id="pro-categorias-grid">
-          <!-- checkboxes inseridos via JS -->
-        </div>
-        <span class="field__hint field__hint--error is-hidden" id="pro-categorias-erro">Selecione no máximo 3 categorias.</span>
-      </div>
-
-      <div class="field-row">
-        <div class="field">
-          <label for="pro-cidade">Cidade</label>
-          <input type="text" id="pro-cidade" name="cidade" required>
-        </div>
-        <div class="field">
-          <label for="pro-bairro">Bairro</label>
-          <input type="text" id="pro-bairro" name="bairro" required>
-        </div>
-      </div>
-
-      <button type="submit" class="btn btn--primary btn--full">Criar conta de profissional</button>
-    </form>
-  </div>
 </div>
 
 <!-- ===================== MODAL: PERFIL PÚBLICO ===================== -->
-<div class="modal-overlay is-hidden" id="modal-profile" role="dialog" aria-modal="true" aria-labelledby="profile-title">
-  <div class="modal modal--profile">
-    <button type="button" class="modal__close" data-close-modal aria-label="Fechar">
-      <i data-lucide="x"></i>
-    </button>
+<div class="modal-overlay is-hidden" id="modal-profile" role="dialog" aria-modal="true" data-lenis-prevent>
+    <div class="modal modal--profile">
+        <button type="button" class="modal__close" data-close-modal aria-label="Fechar">
+            <i data-lucide="x"></i>
+        </button>
 
-    <div class="profile-header">
-      <div class="profile-avatar" id="profile-avatar">—</div>
-      <div class="profile-header__info">
-        <h2 id="profile-title">—</h2>
-        <div class="profile-header__location">
-          <i data-lucide="map-pin"></i>
-          <span id="profile-location">—</span>
+        <div class="profile-header">
+            <div class="profile-avatar" id="profile-avatar">—</div>
+            <div class="profile-header__info">
+                <h2 id="profile-title">—</h2>
+                <div class="profile-header__location">
+                    <i data-lucide="map-pin"></i>
+                    <span id="profile-location">—</span>
+                </div>
+                <div class="stars" id="profile-stars" aria-label="Reputação"></div>
+            </div>
         </div>
-        <div class="stars" id="profile-stars" aria-label="Reputação"></div>
-      </div>
-    </div>
 
-    <div class="profile-categories" id="profile-categories"></div>
+        <div class="profile-categories" id="profile-categories"></div>
 
-    <div class="profile-actions">
-      <button type="button" class="btn btn--outline" id="btn-show-contact">
-        <i data-lucide="phone"></i>
-        Ver contato
-      </button>
-      <button type="button" class="btn btn--primary" id="btn-open-review">
-        <i data-lucide="star"></i>
-        Registrar avaliação
-      </button>
-    </div>
-    <p class="profile-contact is-hidden" id="profile-contact"></p>
+        <div class="profile-actions">
+            <button type="button" class="btn btn--outline" id="btn-show-contact">
+                <i data-lucide="phone"></i>
+                Ver contato
+            </button>
+            <button type="button" class="btn btn--primary" id="btn-open-review">
+                <i data-lucide="star"></i>
+                Registrar avaliação
+            </button>
+        </div>
+        <p class="profile-contact is-hidden" id="profile-contact"></p>
 
-    <div class="profile-reviews">
-      <h3>Avaliações recebidas <span id="profile-reviews-count" class="muted"></span></h3>
-      <ul class="reviews-list" id="reviews-list"></ul>
-      <p class="reviews-empty is-hidden" id="reviews-empty">Este profissional ainda não recebeu avaliações.</p>
+        <div class="profile-reviews">
+            <h3>Avaliações recebidas <span id="profile-reviews-count" class="muted"></span></h3>
+            <ul class="reviews-list" id="reviews-list"></ul>
+            <p class="reviews-empty is-hidden" id="reviews-empty">Este profissional ainda não recebeu avaliações.</p>
+        </div>
     </div>
-  </div>
 </div>
 
 <!-- ===================== MODAL: AVALIAÇÃO ===================== -->
-<div class="modal-overlay is-hidden" id="modal-review" role="dialog" aria-modal="true" aria-labelledby="review-title">
-  <div class="modal modal--review">
+<div class="modal-overlay is-hidden" id="modal-review" role="dialog" aria-modal="true" data-lenis-prevent>
     <button type="button" class="modal__close" data-close-modal aria-label="Fechar">
-      <i data-lucide="x"></i>
+        <i data-lucide="x"></i>
     </button>
     <h2 id="review-title">Avaliar profissional</h2>
     <p class="modal__subtitle" id="review-subtitle">—</p>
 
     <form id="form-review">
-      <div class="field">
-        <span class="field__label-standalone">Nota</span>
-        <div class="star-picker" id="star-picker" role="radiogroup" aria-label="Nota de 1 a 5">
-          <button type="button" class="star-picker__btn" data-value="1" aria-label="1 estrela"><i data-lucide="star"></i></button>
-          <button type="button" class="star-picker__btn" data-value="2" aria-label="2 estrelas"><i data-lucide="star"></i></button>
-          <button type="button" class="star-picker__btn" data-value="3" aria-label="3 estrelas"><i data-lucide="star"></i></button>
-          <button type="button" class="star-picker__btn" data-value="4" aria-label="4 estrelas"><i data-lucide="star"></i></button>
-          <button type="button" class="star-picker__btn" data-value="5" aria-label="5 estrelas"><i data-lucide="star"></i></button>
+        <div class="field">
+            <span class="field__label-standalone">Nota</span>
+            <div class="star-picker" id="star-picker" role="radiogroup" aria-label="Nota de 1 a 5">
+                <button type="button" class="star-picker__btn" data-value="1" aria-label="1 estrela"><i data-lucide="star"></i></button>
+                <button type="button" class="star-picker__btn" data-value="2" aria-label="2 estrelas"><i data-lucide="star"></i></button>
+                <button type="button" class="star-picker__btn" data-value="3" aria-label="3 estrelas"><i data-lucide="star"></i></button>
+                <button type="button" class="star-picker__btn" data-value="4" aria-label="4 estrelas"><i data-lucide="star"></i></button>
+                <button type="button" class="star-picker__btn" data-value="5" aria-label="5 estrelas"><i data-lucide="star"></i></button>
+            </div>
+            <input type="hidden" id="review-nota" name="nota" value="0" required>
         </div>
-        <input type="hidden" id="review-nota" name="nota" value="0" required>
-      </div>
 
-      <div class="field">
-        <label for="review-comentario">Comentário</label>
-        <textarea id="review-comentario" name="comentario" rows="4" required placeholder="Conte como foi o serviço prestado."></textarea>
-      </div>
+        <div class="field">
+            <label for="review-comentario">Comentário</label>
+            <textarea id="review-comentario" name="comentario" rows="4" required placeholder="Conte como foi o serviço prestado."></textarea>
+        </div>
 
-      <button type="submit" class="btn btn--primary btn--full">Enviar avaliação</button>
+        <button type="submit" class="btn btn--primary btn--full">Enviar avaliação</button>
     </form>
-  </div>
+</div>
 </div>
 
 <template id="template-card-profissional">
