@@ -1,0 +1,11 @@
+@GoJob_HostAddress = http://localhost:5107
+
+GET {{GoJob_HostAddress}}/todos/
+Accept: application/json
+
+###
+
+GET {{GoJob_HostAddress}}/todos/1
+Accept: application/json
+
+###
