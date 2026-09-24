@@ -1,418 +1,555 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="scroll-smooth">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GOJOB — Encontre profissionais autônomos de confiança</title>
-<meta name="description" content="GOJOB conecta clientes a profissionais autônomos por categoria e região, com reputação baseada em avaliações reais.">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GOJOB — Encontre profissionais de confiança</title>
+    <meta name="description" content="GOJOB conecta clientes a profissionais autônomos por categoria e região, com reputação baseada em avaliações reais." />
 
-<!-- Fontes -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Lexend:wght@500;600;700;800&display=swap" rel="stylesheet">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<!-- Ícones -->
-<script src="https://unpkg.com/lucide@0.395.0/dist/umd/lucide.min.js" defer></script>
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+          tailwind.config = {
+            darkMode: 'class',
+            theme: {
+              extend: {
+                colors: {
+                  ink: { 950:'#0D0F0E', 900:'#141715', 850:'#191C1A', 800:'#1F2321', 700:'#2A2E2B', 600:'#3A3F3B', 500:'#565C57' },
+                  bone: { 100:'#F5F4F0', 200:'#E9E7E0', 300:'#D8D5CC' },
+                  moss: { 300:'#7FDBAE', 400:'#4FC189', 500:'#2F9E6E', 600:'#227D57', 700:'#1B6345' },
+                  clay: { 300:'#F0D49B', 400:'#E3B562', 500:'#CE9A3E', 600:'#A97B2E' }
+                },
+                fontFamily: {
+                  display: ['"Plus Jakarta Sans"', 'sans-serif'],
+                  body: ['"Inter"', 'sans-serif']
+                },
+                borderRadius: { '2xl': '1.1rem', '3xl': '1.6rem' },
+                boxShadow: {
+                  soft: '0 1px 2px rgba(0,0,0,0.24), 0 8px 24px -8px rgba(0,0,0,0.35)',
+                  glow: '0 0 0 1px rgba(79,193,137,0.25), 0 8px 30px -6px rgba(79,193,137,0.25)'
+                }
+              }
+            }
+          }
+    </script>
 
-<link rel="stylesheet" href="style.css">
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lucide-static/0.454.0/font/lucide.min.css" onerror="this.remove()">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.454.0/umd/lucide.min.js"></script>
+
+    <!-- GSAP -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+
+    <!-- SweetAlert2 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.10.5/sweetalert2.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.10.5/sweetalert2.all.min.js"></script>
+
+    <!-- Alpine.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.1/cdn.min.js" defer></script>
+
+    <link rel="stylesheet" href="style.css">
 </head>
-<body>
 
-<!-- Camada de notificações -->
-<div id="toast-stack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
+<body class="bg-ink-950 text-bone-100 font-body antialiased selection:bg-moss-500/30" x-data="gojobApp()" x-init="init()">
 
-<div id="app-shell">
-
-  <!-- ===================== HEADER ===================== -->
-  <header class="navbar" data-reveal>
-    <div class="navbar__inner">
-      <a href="#top" class="brand">
-        <span class="brand__mark">GOJOB<span class="brand__dot">.</span></span>
-      </a>
-
-      <nav class="navbar__nav" aria-label="Navegação principal">
-        <a href="#buscar" class="navlink">Buscar profissionais</a>
-        <a href="#categorias" class="navlink">Categorias</a>
-        <a href="#processo" class="navlink">Como funciona</a>
-      </nav>
-
-      <div class="navbar__meta">
-        <div class="api-status" id="api-status" title="Status da conexão com a API">
-          <span class="api-status__dot" id="api-status-dot"></span>
-          <span class="api-status__label" id="api-status-label">verificando API</span>
-        </div>
-
-        <button type="button" class="btn btn--ghost" id="btn-open-login" data-auth-tab="login">
-          Entrar
-        </button>
-        <button type="button" class="btn btn--primary" id="btn-open-signup" data-auth-tab="cliente">
-          Criar conta
-        </button>
-
-        <div class="user-chip is-hidden" id="user-chip">
-          <span class="user-chip__initial" id="user-chip-initial">?</span>
-          <span class="user-chip__name" id="user-chip-name">—</span>
-          <button type="button" class="user-chip__logout" id="btn-logout" aria-label="Sair da conta">
-            <i data-lucide="log-out"></i>
-          </button>
-        </div>
-      </div>
-
-      <button type="button" class="navbar__burger" id="btn-burger" aria-label="Abrir menu" aria-expanded="false">
-        <i data-lucide="menu"></i>
-      </button>
-    </div>
-  </header>
-
-  <main id="top">
-
-    <!-- ===================== INTRO / STATUS ===================== -->
-    <section class="intro" id="intro">
-      <div class="intro__grid">
-        <div class="intro__text" data-reveal>
-          <p class="intro__eyebrow">Serviços profissionais, sem intermediário informal</p>
-          <h1 class="intro__title">
-            Cada profissional tem um histórico. GOJOB deixa esse histórico visível antes de você contratar.
-          </h1>
-          <p class="intro__lead">
-            Busque por categoria e cidade, veja a reputação construída em avaliações reais de outros clientes
-            e fale direto com quem vai prestar o serviço.
-          </p>
-          <div class="intro__cta">
-            <a href="#buscar" class="btn btn--primary btn--lg">
-              Buscar um profissional
-              <i data-lucide="arrow-right"></i>
-            </a>
-            <button type="button" class="btn btn--outline btn--lg" data-auth-tab="profissional" id="btn-open-signup-pro">
-              Divulgar meu serviço
+    <!-- =========================================================
+         HEADER / NAVBAR
+    ========================================================= -->
+    <header class="fixed top-0 inset-x-0 z-40 border-b border-ink-800/80 bg-ink-950/85 backdrop-blur-md">
+        <div class="mx-auto max-w-6xl px-5 sm:px-8 h-16 flex items-center justify-between">
+            <button class="flex items-center gap-2 shrink-0" @click="goHome()">
+                <span class="grid place-items-center w-8 h-8 rounded-lg bg-moss-500 text-ink-950 font-display font-800 text-sm">G</span>
+                <span class="font-display font-700 text-lg tracking-tight">GOJOB</span>
             </button>
-          </div>
+
+            <nav class="hidden md:flex items-center gap-8 text-sm text-bone-200/80 font-medium">
+                <button class="hover:text-bone-100 transition-colors" @click="goHome()">Buscar profissionais</button>
+                <button class="hover:text-bone-100 transition-colors" @click="scrollToHow()">Como funciona</button>
+                <template x-if="session.role === 'PROFISSIONAL'">
+                    <button class="hover:text-bone-100 transition-colors" @click="setView('dashboard')">Meu painel</button>
+                </template>
+                <template x-if="session.role === 'ADMIN'">
+                    <button class="hover:text-bone-100 transition-colors" @click="setView('admin')">Administração</button>
+                </template>
+            </nav>
+
+            <div class="flex items-center gap-3">
+                <template x-if="!session.logado">
+                    <div class="hidden sm:flex items-center gap-2">
+                        <button @click="openAuth('login')" class="px-4 py-2 text-sm font-medium text-bone-100 hover:text-moss-300 transition-colors">Entrar</button>
+                        <button @click="openAuth('cadastro')" class="px-4 py-2 text-sm font-medium rounded-xl bg-moss-500 text-ink-950 hover:bg-moss-400 transition-colors shadow-soft">Cadastrar</button>
+                    </div>
+                </template>
+                <template x-if="session.logado">
+                    <div class="hidden sm:flex items-center gap-3">
+                        <span class="text-xs px-2.5 py-1 rounded-full border border-ink-700 text-bone-200/70" x-text="roleLabel(session.role)"></span>
+                        <button class="text-sm font-medium text-bone-100 hover:text-moss-300 transition-colors" @click="irParaPainel()" x-text="'Olá, ' + primeiroNome(session.nome)"></button>
+                        <button x-show="temPainel()" @click="irParaPainel()" class="text-sm text-bone-200/70 hover:text-bone-100 transition-colors border border-ink-700 rounded-lg px-3 py-1.5">Meu painel</button>
+                        <button @click="fazerLogout()" class="flex items-center gap-1.5 text-sm text-bone-100 hover:text-clay-400 transition-colors border border-ink-700 hover:border-clay-400/50 rounded-lg px-3 py-1.5" title="Sair">
+                            <i data-lucide="log-out" class="w-4 h-4"></i> Sair
+                        </button>
+                    </div>
+                </template>
+
+                <!-- Mobile hamburger -->
+                <button class="md:hidden w-9 h-9 grid place-items-center rounded-lg border border-ink-700 text-bone-100" @click="mobileMenu = !mobileMenu">
+                    <i data-lucide="menu" class="w-5 h-5" x-show="!mobileMenu"></i>
+                    <i data-lucide="x" class="w-5 h-5" x-show="mobileMenu" x-cloak></i>
+                </button>
+            </div>
         </div>
 
-        <dl class="intro__stats" data-reveal>
-          <div class="stat">
-            <dt class="stat__label">Profissionais ativos</dt>
-            <dd class="stat__value" id="stat-professionals">—</dd>
-          </div>
-          <div class="stat">
-            <dt class="stat__label">Categorias de serviço</dt>
-            <dd class="stat__value" id="stat-categories">—</dd>
-          </div>
-          <div class="stat">
-            <dt class="stat__label">Cidades atendidas</dt>
-            <dd class="stat__value" id="stat-cities">—</dd>
-          </div>
-          <div class="stat">
-            <dt class="stat__label">Avaliações registradas</dt>
-            <dd class="stat__value" id="stat-reviews">—</dd>
-          </div>
-        </dl>
-      </div>
-    </section>
-
-    <!-- ===================== BUSCA ===================== -->
-    <section class="search-section" id="buscar">
-      <div class="section-head" data-reveal>
-        <h2>Buscar profissionais</h2>
-        <p>Filtre por categoria e localização. A busca considera apenas profissionais com conta ativa.</p>
-      </div>
-
-      <form class="search-bar" id="search-form" data-reveal>
-        <div class="field">
-          <label for="input-cidade">Cidade</label>
-          <input type="text" id="input-cidade" name="cidade" placeholder="Ex.: Birigui" autocomplete="address-level2" required>
+        <!-- Mobile menu panel -->
+        <div x-show="mobileMenu" x-cloak x-transition class="md:hidden border-t border-ink-800 bg-ink-950 px-5 py-4 space-y-3">
+            <button class="block w-full text-left py-1.5 text-bone-200" @click="goHome(); mobileMenu=false">Buscar profissionais</button>
+            <button class="block w-full text-left py-1.5 text-bone-200" @click="scrollToHow(); mobileMenu=false">Como funciona</button>
+            <template x-if="session.role === 'PROFISSIONAL'">
+                <button class="block w-full text-left py-1.5 text-bone-200" @click="setView('dashboard'); mobileMenu=false">Meu painel</button>
+            </template>
+            <template x-if="session.role === 'ADMIN'">
+                <button class="block w-full text-left py-1.5 text-bone-200" @click="setView('admin'); mobileMenu=false">Administração</button>
+            </template>
+            <div class="pt-2 border-t border-ink-800">
+                <template x-if="!session.logado">
+                    <div class="flex gap-2 pt-3">
+                        <button @click="openAuth('login'); mobileMenu=false" class="flex-1 px-4 py-2.5 text-sm font-medium rounded-xl border border-ink-700 text-bone-100">Entrar</button>
+                        <button @click="openAuth('cadastro'); mobileMenu=false" class="flex-1 px-4 py-2.5 text-sm font-medium rounded-xl bg-moss-500 text-ink-950">Cadastrar</button>
+                    </div>
+                </template>
+                <template x-if="session.logado">
+                    <div class="pt-3 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium" x-text="'Olá, ' + primeiroNome(session.nome)"></p>
+                                <p class="text-xs text-bone-200/60" x-text="roleLabel(session.role)"></p>
+                            </div>
+                            <button @click="fazerLogout(); mobileMenu=false" class="flex items-center gap-1.5 text-sm text-bone-100 border border-ink-700 rounded-lg px-3 py-1.5">
+                                <i data-lucide="log-out" class="w-4 h-4"></i> Sair
+                            </button>
+                        </div>
+                        <button x-show="temPainel()" @click="irParaPainel(); mobileMenu=false" class="w-full text-left py-1.5 text-bone-200 border-t border-ink-800 pt-3">Meu painel</button>
+                    </div>
+                </template>
+            </div>
         </div>
+    </header>
 
-        <div class="field">
-          <label for="select-categoria">Categoria</label>
-          <select id="select-categoria" name="categoria">
-            <option value="">Todas as categorias</option>
-          </select>
-        </div>
+    <main class="pt-16">
 
-        <div class="field">
-          <label for="input-bairro">Bairro <span class="field__optional">(opcional)</span></label>
-          <input type="text" id="input-bairro" name="bairro" placeholder="Ex.: Centro" autocomplete="address-level3">
-        </div>
+        <!-- =========================================================
+             VIEW 1 — HERO + BUSCA RÁPIDA
+        ========================================================= -->
+        <section x-show="view === 'home'" x-cloak id="hero-section">
+            <div class="mx-auto max-w-6xl px-5 sm:px-8 pt-16 pb-14 sm:pt-24 sm:pb-20">
+                <div class="max-w-2xl">
+                    <p class="text-sm font-medium text-moss-400 mb-4">Feito para quem contrata e para quem presta serviço</p>
+                    <h1 class="hero-headline font-display font-800 text-4xl sm:text-5xl lg:text-[3.4rem] leading-[1.08] tracking-tight text-bone-100">
+                        O profissional certo mora mais perto do que você imagina.
+                    </h1>
+                    <p class="mt-5 text-base sm:text-lg text-bone-200/75 leading-relaxed max-w-xl">
+                        Busque eletricistas, diaristas, pintores e outros autônomos por categoria e bairro, veja avaliações de quem já contratou e feche direto com quem prestar o serviço.
+                    </p>
+                </div>
 
-        <button type="submit" class="btn btn--primary search-bar__submit">
-          <i data-lucide="search"></i>
-          Buscar
-        </button>
-      </form>
+                <!-- Quick search card -->
+                <form @submit.prevent="buscarProfissionais()" class="hero-search mt-10 bg-ink-900 border border-ink-700 rounded-3xl p-3 sm:p-3.5 shadow-soft">
+                    <div class="grid sm:grid-cols-[1.2fr_1fr_1fr_auto] gap-2.5">
+                        <div class="relative">
+                            <label class="sr-only">Categoria</label>
+                            <select x-model="search.categoriaId" class="w-full appearance-none bg-ink-850 border border-ink-700 rounded-2xl pl-4 pr-9 py-3.5 text-sm text-bone-100 focus:outline-none focus:ring-2 focus:ring-moss-500/50 focus:border-moss-500/50">
+                                <option value="">Qualquer categoria</option>
+                                <template x-for="cat in categoriasAtivas()" :key="cat.id">
+                                    <option :value="cat.id" x-text="cat.nome"></option>
+                                </template>
+                            </select>
+                            <i data-lucide="layout-grid" class="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-bone-200/50 pointer-events-none"></i>
+                        </div>
+                        <div class="relative">
+                            <label class="sr-only">Cidade</label>
+                            <input x-model="search.cidade" type="text" placeholder="Cidade" required
+                                   class="w-full bg-ink-850 border border-ink-700 rounded-2xl pl-4 pr-9 py-3.5 text-sm text-bone-100 placeholder:text-bone-200/40 focus:outline-none focus:ring-2 focus:ring-moss-500/50 focus:border-moss-500/50" />
+                            <i data-lucide="map-pin" class="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-bone-200/50 pointer-events-none"></i>
+                        </div>
+                        <div class="relative">
+                            <label class="sr-only">Bairro</label>
+                            <input x-model="search.bairro" type="text" placeholder="Bairro (opcional)"
+                                   class="w-full bg-ink-850 border border-ink-700 rounded-2xl pl-4 pr-9 py-3.5 text-sm text-bone-100 placeholder:text-bone-200/40 focus:outline-none focus:ring-2 focus:ring-moss-500/50 focus:border-moss-500/50" />
+                            <i data-lucide="signpost" class="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-bone-200/50 pointer-events-none"></i>
+                        </div>
+                        <button type="submit" class="bg-moss-500 hover:bg-moss-400 text-ink-950 font-display font-700 text-sm rounded-2xl px-6 py-3.5 transition-colors flex items-center justify-center gap-2 whitespace-nowrap">
+                            <i data-lucide="search" class="w-4 h-4"></i> Buscar
+                        </button>
+                    </div>
+                </form>
 
-      <div class="results-meta" id="results-meta" aria-live="polite"></div>
+                <!-- Category chips -->
+                <div class="mt-6 flex flex-wrap gap-2">
+                    <template x-for="cat in categoriasAtivas().slice(0,7)" :key="'chip-'+cat.id">
+                        <button @click="search.categoriaId = cat.id; buscarProfissionais()"
+                                class="text-xs px-3.5 py-2 rounded-full border border-ink-700 text-bone-200/70 hover:border-moss-500/50 hover:text-moss-300 transition-colors" x-text="cat.nome"></button>
+                    </template>
+                </div>
+            </div>
 
-      <div class="results-grid" id="results-grid">
-        <!-- cards de profissionais inseridos via JS -->
-      </div>
+            <!-- Como funciona -->
+            <div id="how-it-works" class="border-t border-ink-800/80 bg-ink-900/40">
+                <div class="mx-auto max-w-6xl px-5 sm:px-8 py-14 sm:py-16 grid sm:grid-cols-3 gap-8">
+                    <div class="how-card">
+                        <span class="font-display text-moss-400 text-xs font-700">Passo 1</span>
+                        <h3 class="font-display font-700 text-lg mt-2 text-bone-100">Busque por categoria e cidade</h3>
+                        <p class="mt-2 text-sm text-bone-200/65 leading-relaxed">Filtre profissionais pela sua região e pelo tipo de serviço que você precisa.</p>
+                    </div>
+                    <div class="how-card">
+                        <span class="font-display text-moss-400 text-xs font-700">Passo 2</span>
+                        <h3 class="font-display font-700 text-lg mt-2 text-bone-100">Veja o perfil e a reputação</h3>
+                        <p class="mt-2 text-sm text-bone-200/65 leading-relaxed">Consulte a nota média e os comentários de clientes anteriores antes de decidir.</p>
+                    </div>
+                    <div class="how-card">
+                        <span class="font-display text-moss-400 text-xs font-700">Passo 3</span>
+                        <h3 class="font-display font-700 text-lg mt-2 text-bone-100">Combine direto e avalie depois</h3>
+                        <p class="mt-2 text-sm text-bone-200/65 leading-relaxed">A negociação acontece fora da plataforma. Depois, registre sua avaliação para ajudar outros clientes.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-      <div class="empty-state is-hidden" id="empty-state">
-        <i data-lucide="search-x"></i>
-        <h3>Nenhum profissional encontrado</h3>
-        <p>Tente outra cidade ou remova o filtro de categoria.</p>
-      </div>
-    </section>
+        <!-- =========================================================
+             VIEW 2 — RESULTADOS DA BUSCA
+        ========================================================= -->
+        <section x-show="view === 'resultados'" x-cloak class="mx-auto max-w-6xl px-5 sm:px-8 pt-10 pb-20 min-h-[60vh]">
+            <div class="flex items-start justify-between gap-4 mb-8">
+                <div>
+                    <button @click="goHome()" class="text-xs text-bone-200/60 hover:text-moss-300 flex items-center gap-1 mb-3">
+                        <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Nova busca
+                    </button>
+                    <h2 class="font-display font-700 text-2xl text-bone-100" x-text="resultadosTitulo()"></h2>
+                    <p class="text-sm text-bone-200/60 mt-1" x-text="resultados.length + ' profissional(is) encontrado(s)'"></p>
+                </div>
+            </div>
 
-    <!-- ===================== CATEGORIAS ===================== -->
-    <section class="categories-section" id="categorias">
-      <div class="section-head" data-reveal>
-        <h2>Categorias de serviço</h2>
-        <p>Mantidas pelo administrador da plataforma. Um profissional pode atuar em até 3 delas.</p>
-      </div>
-      <div class="categories-list" id="categories-list" data-reveal>
-        <!-- chips de categoria inseridos via JS -->
-      </div>
-    </section>
+            <div x-show="resultados.length === 0" class="rounded-2xl border border-dashed border-ink-700 p-10 text-center">
+                <i data-lucide="search-x" class="w-8 h-8 mx-auto text-bone-200/40 mb-3"></i>
+                <p class="text-bone-200/70 text-sm">Nenhum profissional encontrado com esses filtros. Tente ampliar a busca.</p>
+            </div>
 
-    <!-- ===================== PROCESSO ===================== -->
-    <section class="process-section" id="processo">
-      <div class="section-head" data-reveal>
-        <h2>Como funciona</h2>
-        <p>Do primeiro filtro até a avaliação final — o ciclo que sustenta a reputação de cada profissional.</p>
-      </div>
+            <div id="cards-grid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <template x-for="p in resultados" :key="p.id">
+                    <button @click="abrirPerfil(p.id)" class="prof-card text-left bg-ink-900 border border-ink-700 rounded-2xl p-5 hover:border-moss-500/40 hover:shadow-glow transition-all duration-200">
+                        <div class="flex items-center gap-3">
+                            <div class="w-11 h-11 shrink-0 rounded-xl bg-ink-800 border border-ink-700 grid place-items-center font-display font-700 text-moss-300" x-text="iniciais(p.nome)"></div>
+                            <div class="min-w-0">
+                                <p class="font-display font-700 text-bone-100 truncate" x-text="p.nome"></p>
+                                <p class="text-xs text-bone-200/55 flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3"></i><span x-text="p.endereco.bairro + ', ' + p.endereco.cidade"></span></p>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap gap-1.5 mt-4">
+                            <template x-for="cid in p.categorias" :key="cid">
+                                <span class="text-[11px] px-2.5 py-1 rounded-full bg-ink-850 border border-ink-700 text-bone-200/70" x-text="nomeCategoria(cid)"></span>
+                            </template>
+                        </div>
+                        <div class="flex items-center justify-between mt-4 pt-4 border-t border-ink-800">
+                            <div class="flex items-center gap-1">
+                                <template x-for="n in 5" :key="n">
+                                    <i data-lucide="star" class="w-3.5 h-3.5" :class="n <= Math.round(p.reputacaoMedia) ? 'fill-clay-400 text-clay-400' : 'text-ink-700'"></i>
+                                </template>
+                                <span class="text-xs text-bone-200/60 ml-1" x-text="p.reputacaoMedia > 0 ? p.reputacaoMedia.toFixed(1) : 'Novo'"></span>
+                            </div>
+                            <span class="text-xs text-moss-400 font-medium">Ver perfil →</span>
+                        </div>
+                    </button>
+                </template>
+            </div>
+        </section>
 
-      <ol class="process-list" data-reveal>
-        <li class="process-step">
-          <span class="process-step__index">1</span>
-          <div>
-            <h3>Buscar</h3>
-            <p>Filtre profissionais ativos por categoria, cidade e, se quiser, bairro.</p>
-          </div>
-        </li>
-        <li class="process-step">
-          <span class="process-step__index">2</span>
-          <div>
-            <h3>Avaliar o perfil</h3>
-            <p>Veja contato, categorias, região de atuação e a reputação média construída por outros clientes.</p>
-          </div>
-        </li>
-        <li class="process-step">
-          <span class="process-step__index">3</span>
-          <div>
-            <h3>Contratar por fora</h3>
-            <p>Negociação e execução do serviço acontecem diretamente entre as partes, fora da plataforma.</p>
-          </div>
-        </li>
-        <li class="process-step">
-          <span class="process-step__index">4</span>
-          <div>
-            <h3>Registrar avaliação</h3>
-            <p>Nota de 1 a 5 e comentário. A reputação média do profissional é recalculada na hora.</p>
-          </div>
-        </li>
-      </ol>
-    </section>
+        <!-- =========================================================
+             VIEW 4 — DASHBOARD DO PROFISSIONAL (RF06)
+        ========================================================= -->
+        <section x-show="view === 'dashboard'" x-cloak class="mx-auto max-w-3xl px-5 sm:px-8 pt-10 pb-24 min-h-[60vh]">
+            <h2 class="font-display font-700 text-2xl text-bone-100">Configurar meu perfil profissional</h2>
+            <p class="text-sm text-bone-200/60 mt-1 mb-8">Escolha até 3 categorias de atuação e informe onde você atende.</p>
 
-  </main>
+            <div class="bg-ink-900 border border-ink-700 rounded-3xl p-6 sm:p-7 space-y-8">
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-display font-700 text-sm text-bone-100">Categorias de atuação</h3>
+                        <span class="text-xs" :class="dash.categorias.length >= 3 ? 'text-clay-400' : 'text-bone-200/50'" x-text="dash.categorias.length + '/3 selecionadas'"></span>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <template x-for="cat in categoriasAtivas()" :key="'dashcat-'+cat.id">
+                            <button type="button" @click="toggleCategoriaDashboard(cat.id)"
+                                    class="text-xs px-3.5 py-2 rounded-full border transition-colors"
+                                    :class="dash.categorias.includes(cat.id) ? 'bg-moss-500 border-moss-500 text-ink-950 font-medium' : 'border-ink-700 text-bone-200/70 hover:border-moss-500/40'"
+                                    x-text="cat.nome"></button>
+                        </template>
+                    </div>
+                    <p class="text-xs text-clay-400 mt-2" x-show="dashCategoriaAviso" x-cloak x-text="dashCategoriaAviso"></p>
+                </div>
 
-  <footer class="site-footer">
-    <div class="site-footer__inner">
-      <span class="brand__mark brand__mark--sm">GOJOB<span class="brand__dot">.</span></span>
-      <p>Projeto acadêmico — IFSP Campus Birigui, Tecnologia em Sistemas para Internet.</p>
+                <div>
+                    <h3 class="font-display font-700 text-sm text-bone-100 mb-3">Endereço de atuação</h3>
+                    <div class="grid sm:grid-cols-2 gap-3">
+                        <input x-model="dash.endereco.logradouro" type="text" placeholder="Logradouro" class="field sm:col-span-2" />
+                        <input x-model="dash.endereco.bairro" type="text" placeholder="Bairro" class="field" />
+                        <input x-model="dash.endereco.cidade" type="text" placeholder="Cidade" class="field" />
+                        <input x-model="dash.endereco.estado" type="text" placeholder="Estado (UF)" maxlength="2" class="field sm:col-span-2" />
+                    </div>
+                </div>
+
+                <div class="flex justify-end">
+                    <button @click="salvarPerfilProfissional()" class="bg-moss-500 hover:bg-moss-400 text-ink-950 font-display font-700 text-sm rounded-xl px-6 py-3 transition-colors">Salvar alterações</button>
+                </div>
+            </div>
+
+            <!-- Minhas avaliações recebidas -->
+            <div class="mt-10">
+                <h3 class="font-display font-700 text-lg text-bone-100 mb-4">Minha reputação</h3>
+                <div class="bg-ink-900 border border-ink-700 rounded-3xl p-6 flex items-center gap-6">
+                    <div class="text-center">
+                        <p class="font-display font-800 text-4xl text-moss-300" x-text="minhaReputacao().toFixed(1)"></p>
+                        <div class="flex gap-0.5 justify-center mt-1">
+                            <template x-for="n in 5" :key="n">
+                                <i data-lucide="star" class="w-3.5 h-3.5" :class="n <= Math.round(minhaReputacao()) ? 'fill-clay-400 text-clay-400' : 'text-ink-700'"></i>
+                            </template>
+                        </div>
+                    </div>
+                    <p class="text-sm text-bone-200/60" x-text="minhasAvaliacoes().length + ' avaliação(ões) recebida(s)'"></p>
+                </div>
+            </div>
+        </section>
+
+        <!-- =========================================================
+             VIEW 5 — PAINEL ADMINISTRADOR (RF03–RF05, RF12)
+        ========================================================= -->
+        <section x-show="view === 'admin'" x-cloak class="mx-auto max-w-4xl px-5 sm:px-8 pt-10 pb-24 min-h-[60vh]">
+            <div class="flex items-center justify-between mb-8">
+                <div>
+                    <h2 class="font-display font-700 text-2xl text-bone-100">Gestão de categorias</h2>
+                    <p class="text-sm text-bone-200/60 mt-1">Crie, edite ou inative categorias de serviço.</p>
+                </div>
+                <button @click="abrirModalCategoria()" class="bg-moss-500 hover:bg-moss-400 text-ink-950 font-display font-700 text-sm rounded-xl px-4 py-2.5 flex items-center gap-1.5">
+                    <i data-lucide="plus" class="w-4 h-4"></i> Nova categoria
+                </button>
+            </div>
+
+            <div class="bg-ink-900 border border-ink-700 rounded-3xl overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-ink-800 text-left text-xs text-bone-200/50 uppercase-none">
+                            <th class="px-5 py-3.5 font-medium">Categoria</th>
+                            <th class="px-5 py-3.5 font-medium hidden sm:table-cell">Descrição</th>
+                            <th class="px-5 py-3.5 font-medium">Status</th>
+                            <th class="px-5 py-3.5 font-medium text-right">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="cat in categorias" :key="'admin-'+cat.id">
+                            <tr class="border-b border-ink-800/70 last:border-0">
+                                <td class="px-5 py-3.5 font-medium text-bone-100" x-text="cat.nome"></td>
+                                <td class="px-5 py-3.5 text-bone-200/60 hidden sm:table-cell truncate max-w-[240px]" x-text="cat.descricao"></td>
+                                <td class="px-5 py-3.5">
+                                    <span class="text-[11px] px-2.5 py-1 rounded-full border" :class="cat.ativa ? 'border-moss-500/40 text-moss-300' : 'border-ink-700 text-bone-200/40'" x-text="cat.ativa ? 'Ativa' : 'Inativa'"></span>
+                                </td>
+                                <td class="px-5 py-3.5 text-right space-x-3">
+                                    <button @click="abrirModalCategoria(cat.id)" class="text-bone-200/60 hover:text-moss-300"><i data-lucide="pencil" class="w-4 h-4 inline"></i></button>
+                                    <button @click="inativarCategoria(cat.id)" x-show="cat.ativa" class="text-bone-200/60 hover:text-clay-400"><i data-lucide="ban" class="w-4 h-4 inline"></i></button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Gestão de contas de profissional (RF12) -->
+            <div class="mt-12">
+                <h3 class="font-display font-700 text-lg text-bone-100 mb-1">Contas de profissionais</h3>
+                <p class="text-sm text-bone-200/60 mb-4">Inativar uma conta anonimiza as avaliações vinculadas, preservando o histórico.</p>
+                <div class="bg-ink-900 border border-ink-700 rounded-3xl divide-y divide-ink-800/70">
+                    <template x-for="p in profissionais" :key="'admin-prof-'+p.id">
+                        <div class="flex items-center justify-between px-5 py-3.5">
+                            <div>
+                                <p class="text-sm font-medium text-bone-100" x-text="p.nome"></p>
+                                <p class="text-xs text-bone-200/50" x-text="p.endereco.cidade"></p>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="text-[11px] px-2.5 py-1 rounded-full border" :class="p.ativo ? 'border-moss-500/40 text-moss-300' : 'border-ink-700 text-bone-200/40'" x-text="p.ativo ? 'Ativa' : 'Inativa'"></span>
+                                <button x-show="p.ativo" @click="inativarProfissional(p.id)" class="text-xs text-clay-400 hover:text-clay-300">Inativar</button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- =========================================================
+         VIEW 3 — DRAWER: PERFIL PÚBLICO DO PROFISSIONAL (RF10)
+    ========================================================= -->
+    <div x-show="perfilAberto" x-cloak class="fixed inset-0 z-50">
+        <div class="absolute inset-0 bg-ink-950/70 backdrop-blur-sm" @click="fecharPerfil()" x-show="perfilAberto" x-transition.opacity></div>
+        <aside id="profile-drawer" class="absolute right-0 top-0 h-full w-full sm:w-[440px] bg-ink-900 border-l border-ink-700 overflow-y-auto">
+            <template x-if="perfilAtual">
+                <div>
+                    <div class="sticky top-0 bg-ink-900/95 backdrop-blur border-b border-ink-800 px-6 py-4 flex items-center justify-between">
+                        <span class="text-xs text-bone-200/50 font-medium">Perfil público</span>
+                        <button @click="fecharPerfil()" class="w-8 h-8 grid place-items-center rounded-lg hover:bg-ink-800 text-bone-200/70"><i data-lucide="x" class="w-4 h-4"></i></button>
+                    </div>
+
+                    <div class="px-6 pt-6">
+                        <div class="w-16 h-16 rounded-2xl bg-ink-800 border border-ink-700 grid place-items-center font-display font-700 text-xl text-moss-300" x-text="iniciais(perfilAtual.nome)"></div>
+                        <h2 class="font-display font-800 text-xl text-bone-100 mt-4" x-text="perfilAtual.nome"></h2>
+                        <p class="text-sm text-bone-200/55 flex items-center gap-1 mt-1"><i data-lucide="map-pin" class="w-3.5 h-3.5"></i><span x-text="perfilAtual.endereco.bairro + ', ' + perfilAtual.endereco.cidade + ' - ' + perfilAtual.endereco.estado"></span></p>
+
+                        <div class="flex items-center gap-2 mt-3">
+                            <div class="flex gap-0.5">
+                                <template x-for="n in 5" :key="n">
+                                    <i data-lucide="star" class="w-4 h-4" :class="n <= Math.round(perfilAtual.reputacaoMedia) ? 'fill-clay-400 text-clay-400' : 'text-ink-700'"></i>
+                                </template>
+                            </div>
+                            <span class="text-sm text-bone-200/70" x-text="perfilAtual.reputacaoMedia > 0 ? perfilAtual.reputacaoMedia.toFixed(1) + ' · ' + avaliacoesDoAtual().length + ' avaliações' : 'Sem avaliações ainda'"></span>
+                        </div>
+
+                        <div class="flex flex-wrap gap-1.5 mt-4">
+                            <template x-for="cid in perfilAtual.categorias" :key="'pcat-'+cid">
+                                <span class="text-[11px] px-2.5 py-1 rounded-full bg-ink-850 border border-ink-700 text-bone-200/70" x-text="nomeCategoria(cid)"></span>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Nova avaliação -->
+                    <div class="mx-6 mt-6 p-5 rounded-2xl bg-ink-850 border border-ink-700">
+                        <template x-if="session.role !== 'CLIENTE'">
+                            <p class="text-xs text-bone-200/50">Entre como cliente para avaliar este profissional.</p>
+                        </template>
+                        <template x-if="session.role === 'CLIENTE' && session.id === perfilAtual.id">
+                            <p class="text-xs text-bone-200/50">Você não pode avaliar a si mesmo.</p>
+                        </template>
+                        <template x-if="session.role === 'CLIENTE' && session.id !== perfilAtual.id">
+                            <div>
+                                <p class="text-sm font-display font-700 text-bone-100 mb-2.5">Deixe sua avaliação</p>
+                                <div class="flex gap-1 mb-3">
+                                    <template x-for="n in 5" :key="'rate-'+n">
+                                        <button type="button" @click="novaAvaliacao.nota = n">
+                                            <i data-lucide="star" class="w-6 h-6 transition-colors" :class="n <= novaAvaliacao.nota ? 'fill-clay-400 text-clay-400' : 'text-ink-700'"></i>
+                                        </button>
+                                    </template>
+                                </div>
+                                <textarea x-model="novaAvaliacao.comentario" rows="3" placeholder="Conte como foi sua experiência"
+                                          class="field resize-none"></textarea>
+                                <button @click="registrarAvaliacao()" class="mt-3 w-full bg-moss-500 hover:bg-moss-400 text-ink-950 font-display font-700 text-sm rounded-xl px-4 py-2.5">Enviar avaliação</button>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Lista de avaliações -->
+                    <div class="px-6 py-6 space-y-4">
+                        <p class="text-xs font-medium text-bone-200/50 uppercase-none">Avaliações</p>
+                        <template x-if="avaliacoesDoAtual().length === 0">
+                            <p class="text-sm text-bone-200/40">Ainda não há avaliações para este profissional.</p>
+                        </template>
+                        <template x-for="av in avaliacoesDoAtual()" :key="av.id">
+                            <div class="border-b border-ink-800 pb-4 last:border-0">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex gap-0.5">
+                                        <template x-for="n in 5" :key="'avn-'+n">
+                                            <i data-lucide="star" class="w-3.5 h-3.5" :class="n <= av.nota ? 'fill-clay-400 text-clay-400' : 'text-ink-700'"></i>
+                                        </template>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-[11px] text-bone-200/40" x-text="formatarData(av.dataHora)"></span>
+                                        <button x-show="session.role==='CLIENTE' && av.idCliente === session.id" @click="excluirAvaliacao(av.id)" class="text-bone-200/40 hover:text-clay-400"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                                    </div>
+                                </div>
+                                <p class="text-sm text-bone-200/75 mt-2 leading-relaxed" x-text="av.comentario"></p>
+                                <p class="text-[11px] text-bone-200/40 mt-1" x-text="av.idCliente ? nomeCliente(av.idCliente) : 'Cliente anônimo'"></p>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </aside>
     </div>
-  </footer>
-</div>
 
-<!-- ===================== MODAL: AUTENTICAÇÃO ===================== -->
-<div class="modal-overlay is-hidden" id="modal-auth" role="dialog" aria-modal="true" data-lenis-prevent>
-    <div class="modal modal--auth">
-        <button type="button" class="modal__close" data-close-modal aria-label="Fechar">
-            <i data-lucide="x"></i>
-        </button>
+    <!-- =========================================================
+         VIEW 6 — MODAIS DE LOGIN E CADASTRO (RF01, RF02)
+    ========================================================= -->
+    <div x-show="authModal.open" x-cloak class="fixed inset-0 z-50 grid place-items-center p-4">
+        <div class="absolute inset-0 bg-ink-950/75 backdrop-blur-sm" @click="closeAuth()" x-transition.opacity></div>
+        <div id="auth-modal" class="relative w-full max-w-md bg-ink-900 border border-ink-700 rounded-3xl p-7 shadow-soft">
+            <button @click="closeAuth()" class="absolute right-5 top-5 text-bone-200/50 hover:text-bone-100"><i data-lucide="x" class="w-4.5 h-4.5"></i></button>
 
-        <div class="modal__tabs" role="tablist" aria-label="Tipo de acesso">
-            <button type="button" class="modal__tab" data-tab="login" role="tab">Entrar</button>
-            <button type="button" class="modal__tab" data-tab="cliente" role="tab">Sou cliente</button>
-            <button type="button" class="modal__tab" data-tab="profissional" role="tab">Sou profissional</button>
-        </div>
-
-        <h2 class="modal__title" id="auth-panel-title">Entrar na sua conta</h2>
-
-        <!-- LOGIN -->
-        <form class="auth-panel" data-panel="login" id="form-login">
-            <div class="field">
-                <label for="login-email">E-mail</label>
-                <input type="email" id="login-email" name="email" required autocomplete="email">
+            <div class="flex gap-6 mb-6 border-b border-ink-800">
+                <button @click="authModal.tab='login'" class="pb-3 text-sm font-display font-700 border-b-2 -mb-px transition-colors" :class="authModal.tab==='login' ? 'border-moss-500 text-bone-100' : 'border-transparent text-bone-200/40'">Entrar</button>
+                <button @click="authModal.tab='cadastro'" class="pb-3 text-sm font-display font-700 border-b-2 -mb-px transition-colors" :class="authModal.tab==='cadastro' ? 'border-moss-500 text-bone-100' : 'border-transparent text-bone-200/40'">Criar conta</button>
             </div>
-            <div class="field">
-                <label for="login-senha">Senha</label>
-                <input type="password" id="login-senha" name="senha" required autocomplete="current-password" minlength="6">
-            </div>
-            <button type="submit" class="btn btn--primary btn--full">Entrar</button>
-        </form>
 
-        <!-- CADASTRO CLIENTE -->
-        <form class="auth-panel" data-panel="cliente" id="form-cadastro-cliente">
-            <input type="hidden" name="tipoUsuario" value="CLIENTE">
-            <div class="field">
-                <label for="cliente-nome">Nome completo</label>
-                <input type="text" id="cliente-nome" name="nome" required>
-            </div>
-            <div class="field-row">
-                <div class="field">
-                    <label for="cliente-email">E-mail</label>
-                    <input type="email" id="cliente-email" name="email" required>
-                    <span class="field__hint" data-hint="email">O e-mail não pode estar em uso na plataforma (RN01).</span>
+            <!-- LOGIN -->
+            <form x-show="authModal.tab==='login'" @submit.prevent="autenticar()" class="space-y-3">
+                <input x-model="loginForm.email" type="email" required placeholder="E-mail" class="field" />
+                <input x-model="loginForm.senha" type="password" required placeholder="Senha" class="field" />
+                <button type="submit" class="w-full bg-moss-500 hover:bg-moss-400 text-ink-950 font-display font-700 text-sm rounded-xl px-4 py-3 mt-2">Entrar</button>
+                <p class="text-[11px] text-bone-200/40 text-center pt-1">Demo: use qualquer conta de exemplo — veja o console para e-mails de teste.</p>
+            </form>
+
+            <!-- CADASTRO -->
+            <form x-show="authModal.tab==='cadastro'" @submit.prevent="cadastrar()" class="space-y-3">
+                <input x-model="cadastroForm.nome" type="text" required placeholder="Nome completo" class="field" />
+                <input x-model="cadastroForm.email" type="email" required placeholder="E-mail" class="field" />
+                <input x-model="cadastroForm.telefone" type="text" required placeholder="Telefone" class="field" />
+                <input x-model="cadastroForm.senha" type="password" required minlength="6" placeholder="Senha (mín. 6 caracteres)" class="field" />
+
+                <div class="grid grid-cols-[1fr_auto] gap-2">
+                    <input x-model="cadastroForm.cidade" type="text" required placeholder="Cidade" class="field" />
+                    <input x-model="cadastroForm.estado" type="text" required maxlength="2" placeholder="UF" class="field w-20 text-center uppercase" />
                 </div>
-                <div class="field">
-                    <label for="cliente-telefone">Telefone</label>
-                    <input type="tel" id="cliente-telefone" name="telefone" required placeholder="(00) 00000-0000">
+
+                <div class="pt-1">
+                    <p class="text-xs text-bone-200/50 mb-2">Tipo de conta</p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" @click="cadastroForm.tipo='CLIENTE'" class="py-2.5 rounded-xl border text-sm font-medium transition-colors" :class="cadastroForm.tipo==='CLIENTE' ? 'border-moss-500 bg-moss-500/10 text-moss-300' : 'border-ink-700 text-bone-200/60'">Cliente</button>
+                        <button type="button" @click="cadastroForm.tipo='PROFISSIONAL'" class="py-2.5 rounded-xl border text-sm font-medium transition-colors" :class="cadastroForm.tipo==='PROFISSIONAL' ? 'border-moss-500 bg-moss-500/10 text-moss-300' : 'border-ink-700 text-bone-200/60'">Profissional</button>
+                    </div>
+                    <p x-show="cadastroForm.tipo==='PROFISSIONAL'" x-cloak class="text-xs text-moss-400/90 mt-2.5 leading-relaxed flex gap-1.5">
+                        <i data-lucide="info" class="w-3.5 h-3.5 shrink-0 mt-0.5"></i>
+                        Sua cidade é o que conecta seu perfil às buscas de clientes. Depois de criar a conta, configure no seu painel até 3 categorias de atuação para começar a aparecer nos resultados.
+                    </p>
                 </div>
-            </div>
-            <div class="field">
-                <label for="cliente-senha">Senha</label>
-                <input type="password" id="cliente-senha" name="senha" required minlength="6">
-                <span class="field__hint">Mínimo de 6 caracteres. Armazenada com hash (bcrypt).</span>
-            </div>
-            <button type="submit" class="btn btn--primary btn--full">Criar conta de cliente</button>
-        </form>
-
-        <!-- CADASTRO PROFISSIONAL -->
-        <form class="auth-panel" data-panel="profissional" id="form-cadastro-profissional">
-            <input type="hidden" name="tipoUsuario" value="PROFISSIONAL">
-            <div class="field">
-                <label for="pro-nome">Nome completo</label>
-                <input type="text" id="pro-nome" name="nome" required>
-            </div>
-            <div class="field-row">
-                <div class="field">
-                    <label for="pro-email">E-mail</label>
-                    <input type="email" id="pro-email" name="email" required>
-                    <span class="field__hint" data-hint="email">O e-mail não pode estar em uso na plataforma (RN01).</span>
-                </div>
-                <div class="field">
-                    <label for="pro-telefone">Telefone</label>
-                    <input type="tel" id="pro-telefone" name="telefone" required placeholder="(00) 00000-0000">
-                </div>
-            </div>
-            <div class="field">
-                <label for="pro-senha">Senha</label>
-                <input type="password" id="pro-senha" name="senha" required minlength="6">
-            </div>
-
-            <div class="field">
-                <span class="field__label-standalone">Categorias de atuação <span class="field__optional">(até 3 — RN05)</span></span>
-                <div class="checkbox-grid" id="pro-categorias-grid">
-                    <!-- checkboxes inseridos via JS -->
-                </div>
-                <span class="field__hint field__hint--error is-hidden" id="pro-categorias-erro">Selecione no máximo 3 categorias.</span>
-            </div>
-
-            <div class="field-row">
-                <div class="field">
-                    <label for="pro-cidade">Cidade</label>
-                    <input type="text" id="pro-cidade" name="cidade" required>
-                </div>
-                <div class="field">
-                    <label for="pro-bairro">Bairro</label>
-                    <input type="text" id="pro-bairro" name="bairro" required>
-                </div>
-            </div>
-
-            <button type="submit" class="btn btn--primary btn--full">Criar conta de profissional</button>
-        </form>
-    </div>
-</div>
-
-<!-- ===================== MODAL: PERFIL PÚBLICO ===================== -->
-<div class="modal-overlay is-hidden" id="modal-profile" role="dialog" aria-modal="true" data-lenis-prevent>
-    <div class="modal modal--profile">
-        <button type="button" class="modal__close" data-close-modal aria-label="Fechar">
-            <i data-lucide="x"></i>
-        </button>
-
-        <div class="profile-header">
-            <div class="profile-avatar" id="profile-avatar">—</div>
-            <div class="profile-header__info">
-                <h2 id="profile-title">—</h2>
-                <div class="profile-header__location">
-                    <i data-lucide="map-pin"></i>
-                    <span id="profile-location">—</span>
-                </div>
-                <div class="stars" id="profile-stars" aria-label="Reputação"></div>
-            </div>
-        </div>
-
-        <div class="profile-categories" id="profile-categories"></div>
-
-        <div class="profile-actions">
-            <button type="button" class="btn btn--outline" id="btn-show-contact">
-                <i data-lucide="phone"></i>
-                Ver contato
-            </button>
-            <button type="button" class="btn btn--primary" id="btn-open-review">
-                <i data-lucide="star"></i>
-                Registrar avaliação
-            </button>
-        </div>
-        <p class="profile-contact is-hidden" id="profile-contact"></p>
-
-        <div class="profile-reviews">
-            <h3>Avaliações recebidas <span id="profile-reviews-count" class="muted"></span></h3>
-            <ul class="reviews-list" id="reviews-list"></ul>
-            <p class="reviews-empty is-hidden" id="reviews-empty">Este profissional ainda não recebeu avaliações.</p>
+                <button type="submit" class="w-full bg-moss-500 hover:bg-moss-400 text-ink-950 font-display font-700 text-sm rounded-xl px-4 py-3 mt-2">Criar conta</button>
+            </form>
         </div>
     </div>
-</div>
 
-<!-- ===================== MODAL: AVALIAÇÃO ===================== -->
-<div class="modal-overlay is-hidden" id="modal-review" role="dialog" aria-modal="true" data-lenis-prevent>
-    <button type="button" class="modal__close" data-close-modal aria-label="Fechar">
-        <i data-lucide="x"></i>
-    </button>
-    <h2 id="review-title">Avaliar profissional</h2>
-    <p class="modal__subtitle" id="review-subtitle">—</p>
-
-    <form id="form-review">
-        <div class="field">
-            <span class="field__label-standalone">Nota</span>
-            <div class="star-picker" id="star-picker" role="radiogroup" aria-label="Nota de 1 a 5">
-                <button type="button" class="star-picker__btn" data-value="1" aria-label="1 estrela"><i data-lucide="star"></i></button>
-                <button type="button" class="star-picker__btn" data-value="2" aria-label="2 estrelas"><i data-lucide="star"></i></button>
-                <button type="button" class="star-picker__btn" data-value="3" aria-label="3 estrelas"><i data-lucide="star"></i></button>
-                <button type="button" class="star-picker__btn" data-value="4" aria-label="4 estrelas"><i data-lucide="star"></i></button>
-                <button type="button" class="star-picker__btn" data-value="5" aria-label="5 estrelas"><i data-lucide="star"></i></button>
-            </div>
-            <input type="hidden" id="review-nota" name="nota" value="0" required>
+    <!-- =========================================================
+         MODAL: NOVA / EDITAR CATEGORIA (admin)
+    ========================================================= -->
+    <div x-show="categoriaModal.open" x-cloak class="fixed inset-0 z-50 grid place-items-center p-4">
+        <div class="absolute inset-0 bg-ink-950/75 backdrop-blur-sm" @click="categoriaModal.open=false" x-transition.opacity></div>
+        <div class="relative w-full max-w-sm bg-ink-900 border border-ink-700 rounded-3xl p-7 shadow-soft">
+            <h3 class="font-display font-700 text-lg text-bone-100 mb-4" x-text="categoriaModal.id ? 'Editar categoria' : 'Nova categoria'"></h3>
+            <form @submit.prevent="salvarCategoria()" class="space-y-3">
+                <input x-model="categoriaModal.nome" type="text" required placeholder="Nome" class="field" />
+                <textarea x-model="categoriaModal.descricao" rows="3" placeholder="Descrição" class="field resize-none"></textarea>
+                <div class="flex gap-2 pt-2">
+                    <button type="button" @click="categoriaModal.open=false" class="flex-1 py-2.5 rounded-xl border border-ink-700 text-sm text-bone-200/70">Cancelar</button>
+                    <button type="submit" class="flex-1 py-2.5 rounded-xl bg-moss-500 text-ink-950 text-sm font-display font-700">Salvar</button>
+                </div>
+            </form>
         </div>
+    </div>
 
-        <div class="field">
-            <label for="review-comentario">Comentário</label>
-            <textarea id="review-comentario" name="comentario" rows="4" required placeholder="Conte como foi o serviço prestado."></textarea>
+    <footer class="border-t border-ink-800/80 py-8">
+        <div class="mx-auto max-w-6xl px-5 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-bone-200/40">
+            <span>© 2026 GOJOB — projeto acadêmico, IFSP Birigui.</span>
+            <span>Frontend estático · API REST em ASP.NET Core (integração via fetch)</span>
         </div>
+    </footer>
 
-        <button type="submit" class="btn btn--primary btn--full">Enviar avaliação</button>
-    </form>
-</div>
-</div>
-
-<template id="template-card-profissional">
-  <article class="pro-card">
-    <div class="pro-card__top">
-      <div class="pro-card__avatar"></div>
-      <div>
-        <h3 class="pro-card__name"></h3>
-        <p class="pro-card__location">
-          <i data-lucide="map-pin"></i>
-          <span class="pro-card__location-text"></span>
-        </p>
-      </div>
-    </div>
-    <div class="pro-card__categories"></div>
-    <div class="pro-card__footer">
-      <div class="stars pro-card__stars"></div>
-      <button type="button" class="btn btn--outline btn--sm pro-card__view">Ver perfil</button>
-    </div>
-  </article>
-</template>
-
-<!-- Bibliotecas de animação e scroll -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
-<script src="https://unpkg.com/lenis@1.1.13/dist/lenis.min.js" defer></script>
-
-<script src="app.js" defer></script>
+    <script src="app.js"></script>
 </body>
 </html>

@@ -1,876 +1,716 @@
-/* =========================================================
-   GOJOB — app.js
-   Camada de UI + camada de API preparada para o back-end C#.
-   Organização:
-     1. Configuração e estado
-     2. Camada de API (fetch real + fallback de demonstração)
-     3. Utilitários (toast, estrelas, formatação)
-     4. Dados de demonstração (usados só se a API não responder)
-     5. Renderização (cards, categorias, perfil, avaliações)
-     6. Modais e formulários
-     7. Busca
-     8. Animações (Lenis + GSAP)
-     9. Inicialização
-   ========================================================= */
+/* =====================================================================
+   GOJOB — Frontend (HTML5 + CSS3 + JavaScript ES6+)
+   Estrutura orientada a objetos client-side, pronta para consumir a
+   API REST em ASP.NET Core. Os métodos de serviço trazem a chamada
+   fetch() comentada ao lado da simulação local usada nesta prévia,
+   para facilitar a troca por uma integração real.
+   ===================================================================== */
 
-/* =========================================================
-   1. CONFIGURAÇÃO E ESTADO
-   ========================================================= */
-const CONFIG = {
-  // Ajuste para a URL real da API C# (ex.: https://api.gojob.com.br/api)
-  API_BASE_URL: "https://localhost:5001/api",
-  HEALTHCHECK_TIMEOUT_MS: 2500,
-};
+const API_BASE_URL = "https://localhost:5001/api"; // ajuste para a URL da sua API ASP.NET Core
+const STORAGE_TOKEN_KEY = "gojob_token";
+const STORAGE_USER_KEY = "gojob_user";
 
-const state = {
-  apiOnline: false,      // true quando a API C# responde de fato
-  usingMockData: false,  // true quando os dados vêm do fallback local
-  categorias: [],
-  profissionais: [],
-  currentUser: null,     // { id, nome, tipoUsuario }
-  activeProfileId: null, // profissional aberto no modal de perfil
-};
-
-/* =========================================================
-   2. CAMADA DE API
-   Toda função tenta a chamada real primeiro. Se a rede falhar
-   (back-end C# fora do ar, CORS, etc.) cai no fallback de
-   demonstração — para produção, basta remover os blocos
-   marcados com "// DEV FALLBACK".
-   ========================================================= */
-const API = {
-  async _request(path, options = {}) {
-    const res = await fetch(`${CONFIG.API_BASE_URL}${path}`, {
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-      ...options,
-    });
-
-    let body = null;
-    try { body = await res.json(); } catch (_) { /* corpo vazio */ }
-
-    if (!res.ok) {
-      // Espera-se do back-end C#: { exception: "EmailDuplicadoException", message: "..." }
-      const error = new Error(body?.message || "Erro inesperado na API.");
-      error.exception = body?.exception || null;
-      error.status = res.status;
-      throw error;
+/* ---------------------------------------------------------------------
+   1. EXCEÇÕES DE DOMÍNIO (hierarquia única, capturada pelos Controllers)
+--------------------------------------------------------------------- */
+class GojobException extends Error {
+    constructor(mensagem) {
+        super(mensagem);
+        this.name = this.constructor.name;
     }
-    return body;
-  },
-
-  async healthcheck() {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), CONFIG.HEALTHCHECK_TIMEOUT_MS);
-    try {
-      await fetch(`${CONFIG.API_BASE_URL}/health`, { signal: controller.signal });
-      clearTimeout(timer);
-      return true;
-    } catch (_) {
-      clearTimeout(timer);
-      return false;
-    }
-  },
-
-  // RF01 — Cadastro Unificado de Usuários
-  async cadastrarUsuario(dto) {
-    if (state.apiOnline) {
-      return this._request("/usuarios", { method: "POST", body: JSON.stringify(dto) });
-    }
-    return mockCadastrarUsuario(dto); // DEV FALLBACK
-  },
-
-  // RF02 — Autenticação
-  async autenticar(email, senha) {
-    if (state.apiOnline) {
-      return this._request("/auth/login", { method: "POST", body: JSON.stringify({ email, senha }) });
-    }
-    return mockAutenticar(email, senha); // DEV FALLBACK
-  },
-
-  // Categorias ativas (suporta RF06 / RF07)
-  async listarCategorias() {
-    if (state.apiOnline) {
-      return this._request("/categorias?ativa=true");
-    }
-    return mockListarCategorias(); // DEV FALLBACK
-  },
-
-  // RF07 — Busca e Filtragem de Profissionais
-  async buscarProfissionais({ cidade, categoria, bairro }) {
-    if (state.apiOnline) {
-      const params = new URLSearchParams({ cidade });
-      if (categoria) params.set("categoria", categoria);
-      if (bairro) params.set("bairro", bairro);
-      return this._request(`/profissionais?${params.toString()}`);
-    }
-    return mockBuscarProfissionais({ cidade, categoria, bairro }); // DEV FALLBACK
-  },
-
-  // RF10 — Exibição do Perfil Profissional
-  async obterPerfilProfissional(id) {
-    if (state.apiOnline) {
-      return this._request(`/profissionais/${id}`);
-    }
-    return mockObterPerfil(id); // DEV FALLBACK
-  },
-
-  // RF08 — Registro de Avaliação
-  async registrarAvaliacao(dto) {
-    if (state.apiOnline) {
-      return this._request("/avaliacoes", { method: "POST", body: JSON.stringify(dto) });
-    }
-    return mockRegistrarAvaliacao(dto); // DEV FALLBACK
-  },
-
-  // RF09 — Exclusão de Avaliação
-  async excluirAvaliacao(idAvaliacao, idCliente) {
-    if (state.apiOnline) {
-      return this._request(`/avaliacoes/${idAvaliacao}`, {
-        method: "DELETE",
-        body: JSON.stringify({ idCliente }),
-      });
-    }
-    return mockExcluirAvaliacao(idAvaliacao, idCliente); // DEV FALLBACK
-  },
-};
-
-/* =========================================================
-   3. UTILITÁRIOS
-   ========================================================= */
-function toast({ type = "success", title, message, duration = 5000 }) {
-  const stack = document.getElementById("toast-stack");
-  const el = document.createElement("div");
-  el.className = `toast toast--${type}`;
-  el.innerHTML = `
-    <span class="toast__icon"><i data-lucide="${type === "error" ? "alert-circle" : "check-circle-2"}"></i></span>
-    <div class="toast__body">
-      <p class="toast__title">${title}</p>
-      ${message ? `<p class="toast__message">${message}</p>` : ""}
-    </div>
-    <button type="button" class="toast__close" aria-label="Fechar notificação"><i data-lucide="x"></i></button>
-  `;
-  stack.appendChild(el);
-  if (window.lucide) lucide.createIcons();
-
-  const remove = () => {
-    el.style.transition = "opacity 200ms ease, transform 200ms ease";
-    el.style.opacity = "0";
-    el.style.transform = "translateX(12px)";
-    setTimeout(() => el.remove(), 200);
-  };
-  el.querySelector(".toast__close").addEventListener("click", remove);
-  const timer = setTimeout(remove, duration);
-  el.addEventListener("mouseenter", () => clearTimeout(timer));
+}
+class EmailDuplicadoException extends GojobException {
+    constructor() { super("Este e-mail já está cadastrado na plataforma."); }
+}
+class UsuarioNaoEncontradoException extends GojobException {
+    constructor() { super("E-mail ou senha inválidos."); }
+}
+class ProfissionalNaoEncontradoException extends GojobException {
+    constructor() { super("Profissional não encontrado."); }
+}
+class CategoriaInativaException extends GojobException {
+    constructor(nome) { super(`A categoria "${nome}" está inativa.`); }
+}
+class LimiteCategoriasException extends GojobException {
+    constructor() { super("Você já atingiu o limite de 3 categorias."); }
+}
+class AvaliacaoInvalidaException extends GojobException {
+    constructor() { super("Informe uma nota de 1 a 5 e um comentário."); }
+}
+class AutoAvaliacaoException extends GojobException {
+    constructor() { super("Não é possível avaliar a si mesmo."); }
+}
+class OperacaoNaoPermitidaException extends GojobException {
+    constructor() { super("Você não tem permissão para executar esta ação."); }
+}
+class DadosObrigatoriosException extends GojobException {
+    constructor(campo) { super(`Preencha o campo obrigatório: ${campo}.`); }
 }
 
-// Traduz exceções de domínio do back-end (Parte 8 do documento GOJOB)
-// em mensagens compreensíveis para o usuário final.
-const EXCEPTION_MESSAGES = {
-  EmailDuplicadoException: "Este e-mail já está cadastrado na plataforma.",
-  UsuarioNaoEncontradoException: "E-mail ou senha inválidos.",
-  ProfissionalNaoEncontradoException: "Este profissional não foi encontrado ou está inativo.",
-  CategoriaNaoEncontradaException: "Categoria não encontrada.",
-  CategoriaInativaException: "Esta categoria não está mais ativa.",
-  LimiteCategoriasException: "É permitido escolher no máximo 3 categorias.",
-  AvaliacaoInvalidaException: "Informe uma nota de 1 a 5 e um comentário.",
-  AutoAvaliacaoException: "Não é possível avaliar o próprio perfil.",
-  OperacaoNaoPermitidaException: "Você não tem permissão para executar esta ação.",
-  DadosObrigatoriosException: "Preencha todos os campos obrigatórios.",
-};
-
-function handleApiError(error, fallbackTitle = "Não foi possível concluir a ação") {
-  const message = EXCEPTION_MESSAGES[error.exception] || error.message || "Tente novamente em instantes.";
-  toast({ type: "error", title: fallbackTitle, message });
+/* ---------------------------------------------------------------------
+   2. CLASSES DE DOMÍNIO (encapsulamento, herança, abstração, polimorfismo)
+--------------------------------------------------------------------- */
+class Endereco {
+    constructor({ logradouro = "", bairro = "", cidade = "", estado = "" } = {}) {
+        this.logradouro = logradouro;
+        this.bairro = bairro;
+        this.cidade = cidade;
+        this.estado = estado;
+    }
+    validarCamposObrigatorios() {
+        return Boolean(this.logradouro && this.cidade && this.estado);
+    }
 }
 
-function renderStars(container, media, count) {
-  container.innerHTML = "";
-  for (let i = 1; i <= 5; i++) {
-    const icon = document.createElement("i");
-    icon.dataset.lucide = "star";
-    if (i <= Math.round(media)) icon.classList.add("is-filled");
-    container.appendChild(icon);
-  }
-  if (typeof count === "number") {
-    const span = document.createElement("span");
-    span.className = "stars__count";
-    span.textContent = media > 0 ? `${media.toFixed(1)} · ${count} avaliação${count === 1 ? "" : "es"}` : "Sem avaliações";
-    container.appendChild(span);
-  }
-  if (window.lucide) lucide.createIcons();
+class Categoria {
+    constructor(id, nome, descricao, ativa = true) {
+        this.id = id;
+        this.nome = nome;
+        this.descricao = descricao;
+        this.ativa = ativa;
+    }
+    ativar() { this.ativa = true; }
+    inativar() { this.ativa = false; }
+    estaAtiva() { return this.ativa; }
 }
 
-function initials(nome) {
-  return nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
+class Avaliacao {
+    constructor({ id, idCliente, idProfissional, nota, comentario, dataHora }) {
+        this.id = id;
+        this.idCliente = idCliente; // null quando anonimizada (RN10)
+        this.idProfissional = idProfissional;
+        this.nota = nota;
+        this.comentario = comentario;
+        this.dataHora = dataHora;
+    }
+    validarNota() { return this.nota >= 1 && this.nota <= 5 && Boolean(this.comentario); }
+    anonimizar() { this.idCliente = null; }
 }
 
-function formatDate(iso) {
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+class Usuario {
+    #email; #senhaHash;
+    constructor(id, nome, email, senhaHash, telefone) {
+        if (new.target === Usuario) {
+            throw new Error("Usuario é abstrata e não pode ser instanciada diretamente.");
+        }
+        this.id = id;
+        this.nome = nome;
+        this.#email = email;
+        this.#senhaHash = senhaHash;
+        this.telefone = telefone;
+        this.ativo = true;
+    }
+    autenticar(senha) { return senha === this.#senhaHash; } // demo: comparação direta (backend usa bcrypt)
+    atualizarDados(nome, telefone) {
+        if (!nome || !telefone) throw new DadosObrigatoriosException("nome/telefone");
+        this.nome = nome;
+        this.telefone = telefone;
+    }
+    // Método abstrato — cada subclasse fornece sua implementação (polimorfismo)
+    obterResumoPerfil() { throw new Error("obterResumoPerfil() deve ser implementado pela subclasse."); }
+    getId() { return this.id; }
+    getNome() { return this.nome; }
+    getEmail() { return this.#email; }
 }
 
-/* =========================================================
-   4. DADOS DE DEMONSTRAÇÃO
-   Usados apenas quando a API C# real não está acessível,
-   para que a interface permaneça navegável e demonstrável.
-   ========================================================= */
-const MOCK_CATEGORIES = [
-  { id: 1, nome: "Elétrica", descricao: "Instalações e reparos elétricos residenciais", ativa: true },
-  { id: 2, nome: "Hidráulica", descricao: "Encanamento, vazamentos e reparos", ativa: true },
-  { id: 3, nome: "Limpeza", descricao: "Limpeza residencial e pós-obra", ativa: true },
-  { id: 4, nome: "Pintura", descricao: "Pintura residencial e comercial", ativa: true },
-  { id: 5, nome: "Jardinagem", descricao: "Manutenção de jardins e paisagismo", ativa: true },
-  { id: 6, nome: "Marcenaria", descricao: "Móveis sob medida e reparos em madeira", ativa: true },
-  { id: 7, nome: "Informática", descricao: "Manutenção de computadores e redes", ativa: true },
-  { id: 8, nome: "Beleza", descricao: "Serviços de estética a domicílio", ativa: true },
+class Cliente extends Usuario {
+    constructor(id, nome, email, senhaHash, telefone) {
+        super(id, nome, email, senhaHash, telefone);
+        this.tipo = "CLIENTE";
+    }
+    obterResumoPerfil() {
+        return { tipo: this.tipo, nome: this.nome };
+    }
+}
+
+class Profissional extends Usuario {
+    #categorias = [];
+    constructor(id, nome, email, senhaHash, telefone) {
+        super(id, nome, email, senhaHash, telefone);
+        this.tipo = "PROFISSIONAL";
+        this.reputacaoMedia = 0;
+        this.endereco = null;
+    }
+    get categorias() { return this.#categorias; }
+    set categorias(lista) { this.#categorias = lista; }
+
+    configurarEndereco(endereco) {
+        if (!endereco.validarCamposObrigatorios()) {
+            throw new DadosObrigatoriosException("logradouro/cidade/estado");
+        }
+        this.endereco = endereco;
+    }
+    adicionarCategoria(categoria) {
+        if (!categoria.estaAtiva()) throw new CategoriaInativaException(categoria.nome);
+        if (this.#categorias.includes(categoria.id)) return;
+        if (this.#categorias.length >= 3) throw new LimiteCategoriasException();
+        this.#categorias.push(categoria.id);
+    }
+    removerCategoria(categoriaId) {
+        this.#categorias = this.#categorias.filter((c) => c !== categoriaId);
+    }
+    calcularReputacao(avaliacoes) {
+        if (avaliacoes.length === 0) { this.reputacaoMedia = 0; return 0; }
+        const soma = avaliacoes.reduce((acc, av) => acc + av.nota, 0);
+        this.reputacaoMedia = soma / avaliacoes.length;
+        return this.reputacaoMedia;
+    }
+    obterResumoPerfil() {
+        // RN07 — nunca expõe e-mail, hash de senha ou tipo de usuário sensível
+        return {
+            nome: this.nome,
+            categorias: [...this.#categorias],
+            cidade: this.endereco?.cidade,
+            reputacaoMedia: this.reputacaoMedia,
+        };
+    }
+}
+
+class Administrador extends Usuario {
+    constructor(id, nome, email, senhaHash, telefone) {
+        super(id, nome, email, senhaHash, telefone);
+        this.tipo = "ADMIN";
+    }
+    obterResumoPerfil() { return { tipo: this.tipo, nome: this.nome }; }
+}
+
+/* ---------------------------------------------------------------------
+   3. DADOS-BASE PARA A PRÉVIA (substituídos pelas tabelas reais via API)
+--------------------------------------------------------------------- */
+const seedCategorias = [
+    new Categoria(1, "Elétrica", "Instalações, reparos e manutenção elétrica residencial e comercial."),
+    new Categoria(2, "Limpeza", "Faxina residencial, comercial e pós-obra."),
+    new Categoria(3, "Pintura", "Pintura de paredes, fachadas e retoques."),
+    new Categoria(4, "Encanamento", "Reparos hidráulicos, vazamentos e instalações."),
+    new Categoria(5, "Jardinagem", "Manutenção de jardins, poda e paisagismo."),
+    new Categoria(6, "Montagem de Móveis", "Montagem e pequenos reparos de móveis planejados."),
+    new Categoria(7, "Aulas Particulares", "Reforço escolar e aulas de idiomas."),
+    new Categoria(8, "Manutenção de TI", "Suporte técnico e manutenção de computadores.", false),
 ];
 
-const MOCK_PROFESSIONALS = [
-  {
-    id: 101, nome: "Marcos Aurélio Ferreira", cidade: "Birigui", bairro: "Centro",
-    telefone: "(18) 99123-4567", categorias: [1, 7],
-    avaliacoes: [
-      { id: 1, cliente: "Renata C.", nota: 5, comentario: "Resolveu o curto-circuito no mesmo dia. Muito atencioso.", dataHora: "2026-08-02" },
-      { id: 2, cliente: "João P.", nota: 4, comentario: "Bom serviço, chegou um pouco atrasado.", dataHora: "2026-07-14" },
-    ],
-  },
-  {
-    id: 102, nome: "Cláudia Regina Souza", cidade: "Birigui", bairro: "Jardim Cristina",
-    telefone: "(18) 99876-5432", categorias: [3],
-    avaliacoes: [
-      { id: 3, cliente: "Marina T.", nota: 5, comentario: "Apartamento ficou impecável. Recomendo muito.", dataHora: "2026-09-01" },
-      { id: 4, cliente: "Felipe A.", nota: 5, comentario: "Pontual e cuidadosa com os detalhes.", dataHora: "2026-08-20" },
-      { id: 5, cliente: "Bianca R.", nota: 4, comentario: "Ótimo custo-benefício.", dataHora: "2026-07-30" },
-    ],
-  },
-  {
-    id: 103, nome: "Eduardo Lima Santos", cidade: "Birigui", bairro: "Vila Mendonça",
-    telefone: "(18) 99222-1188", categorias: [2, 6],
-    avaliacoes: [
-      { id: 6, cliente: "Patrícia G.", nota: 3, comentario: "Resolveu o vazamento, mas demorou para retornar mensagens.", dataHora: "2026-06-18" },
-    ],
-  },
-  {
-    id: 104, nome: "Ana Beatriz Moraes", cidade: "Araçatuba", bairro: "Jardim Europa",
-    telefone: "(18) 99345-7788", categorias: [4, 5],
-    avaliacoes: [],
-  },
-  {
-    id: 105, nome: "Ricardo Nogueira Alves", cidade: "Araçatuba", bairro: "Vila Mendonça",
-    telefone: "(18) 99555-3321", categorias: [1],
-    avaliacoes: [
-      { id: 7, cliente: "Vanessa L.", nota: 5, comentario: "Excelente profissional, super indico.", dataHora: "2026-08-27" },
-    ],
-  },
-  {
-    id: 106, nome: "Fernanda Costa Ribeiro", cidade: "Birigui", bairro: "Centro",
-    telefone: "(18) 99777-4455", categorias: [8],
-    avaliacoes: [
-      { id: 8, cliente: "Camila S.", nota: 5, comentario: "Atendimento a domicílio impecável.", dataHora: "2026-09-05" },
-      { id: 9, cliente: "Letícia F.", nota: 4, comentario: "Muito boa, voltarei a chamar.", dataHora: "2026-08-11" },
-    ],
-  },
+const seedProfissionais = [
+    { id: 101, nome: "Marcos Andrade", email: "marcos@exemplo.com", senha: "123456", telefone: "18999990001", categorias: [1, 6], endereco: { logradouro: "Rua das Palmeiras, 120", bairro: "Centro", cidade: "Birigui", estado: "SP" } },
+    { id: 102, nome: "Fernanda Lima", email: "fernanda@exemplo.com", senha: "123456", telefone: "18999990002", categorias: [2], endereco: { logradouro: "Av. Brasil, 800", bairro: "Vila Iracema", cidade: "Birigui", estado: "SP" } },
+    { id: 103, nome: "Carlos Eduardo", email: "carlos@exemplo.com", senha: "123456", telefone: "18999990003", categorias: [3, 4], endereco: { logradouro: "Rua Sete de Setembro, 45", bairro: "Jardim Planalto", cidade: "Birigui", estado: "SP" } },
+    { id: 104, nome: "Juliana Ferraz", email: "juliana@exemplo.com", senha: "123456", telefone: "18999990004", categorias: [7], endereco: { logradouro: "Rua Amazonas, 300", bairro: "Centro", cidade: "Araçatuba", estado: "SP" } },
+    { id: 105, nome: "Roberto Nunes", email: "roberto@exemplo.com", senha: "123456", telefone: "18999990005", categorias: [5], endereco: { logradouro: "Rua das Flores, 15", bairro: "Jardim Europa", cidade: "Birigui", estado: "SP" } },
+    { id: 106, nome: "Patrícia Souza", email: "patricia@exemplo.com", senha: "123456", telefone: "18999990006", categorias: [2, 6], endereco: { logradouro: "Av. Portugal, 512", bairro: "Vila Mendonça", cidade: "Araçatuba", estado: "SP" } },
 ];
 
-const mockUsers = []; // usuários criados durante a sessão de demonstração
-let mockAvaliacaoSeq = 100;
+const seedClientes = [
+    { id: 201, nome: "Ana Beatriz", email: "ana@exemplo.com", senha: "123456", telefone: "18988880001" },
+    { id: 202, nome: "Pedro Henrique", email: "pedro@exemplo.com", senha: "123456", telefone: "18988880002" },
+];
 
-function mockReputacao(prof) {
-  if (prof.avaliacoes.length === 0) return 0;
-  const soma = prof.avaliacoes.reduce((acc, a) => acc + a.nota, 0);
-  return soma / prof.avaliacoes.length;
-}
+const seedAdmin = { id: 901, nome: "Administrador GOJOB", email: "admin@gojob.com", senha: "admin123", telefone: "1800000000" };
 
-async function mockDelay(ms = 350) { return new Promise((r) => setTimeout(r, ms)); }
+const seedAvaliacoes = [
+    { id: 1, idCliente: 201, idProfissional: 101, nota: 5, comentario: "Excelente serviço, super pontual e organizado.", dataHora: "2026-08-02" },
+    { id: 2, idCliente: 202, idProfissional: 101, nota: 4, comentario: "Bom trabalho, recomendo.", dataHora: "2026-08-14" },
+    { id: 3, idCliente: 201, idProfissional: 102, nota: 5, comentario: "Deixou a casa impecável!", dataHora: "2026-08-20" },
+    { id: 4, idCliente: 202, idProfissional: 103, nota: 3, comentario: "Serviço ok, mas atrasou um pouco.", dataHora: "2026-08-25" },
+];
 
-async function mockCadastrarUsuario(dto) {
-  await mockDelay();
-  const existente = mockUsers.find((u) => u.email === dto.email) ||
-    MOCK_PROFESSIONALS.some((p) => p.nome === dto.nome);
-  if (mockUsers.some((u) => u.email === dto.email)) {
-    const err = new Error("E-mail já cadastrado.");
-    err.exception = "EmailDuplicadoException";
-    throw err;
-  }
-  const usuario = { id: Date.now(), nome: dto.nome, email: dto.email, tipoUsuario: dto.tipoUsuario };
-  mockUsers.push(usuario);
-  return usuario;
-}
-
-async function mockAutenticar(email, senha) {
-  await mockDelay();
-  const usuario = mockUsers.find((u) => u.email === email);
-  if (!usuario) {
-    const err = new Error("Credenciais inválidas.");
-    err.exception = "UsuarioNaoEncontradoException";
-    throw err;
-  }
-  return { id: usuario.id, nome: usuario.nome, tipoUsuario: usuario.tipoUsuario, token: "mock-token" };
-}
-
-async function mockListarCategorias() {
-  await mockDelay(200);
-  return MOCK_CATEGORIES.filter((c) => c.ativa);
-}
-
-async function mockBuscarProfissionais({ cidade, categoria, bairro }) {
-  await mockDelay();
-  const cidadeNorm = (cidade || "").trim().toLowerCase();
-  return MOCK_PROFESSIONALS.filter((p) => {
-    const matchCidade = !cidadeNorm || p.cidade.toLowerCase().includes(cidadeNorm);
-    const matchCategoria = !categoria || p.categorias.includes(Number(categoria));
-    const matchBairro = !bairro || p.bairro.toLowerCase().includes(bairro.trim().toLowerCase());
-    return matchCidade && matchCategoria && matchBairro;
-  }).map((p) => ({
-    id: p.id,
-    nome: p.nome,
-    cidade: p.cidade,
-    bairro: p.bairro,
-    categorias: p.categorias,
-    reputacaoMedia: mockReputacao(p),
-    totalAvaliacoes: p.avaliacoes.length,
-  }));
-}
-
-async function mockObterPerfil(id) {
-  await mockDelay(250);
-  const prof = MOCK_PROFESSIONALS.find((p) => p.id === Number(id));
-  if (!prof) {
-    const err = new Error("Profissional não encontrado.");
-    err.exception = "ProfissionalNaoEncontradoException";
-    throw err;
-  }
-  return {
-    id: prof.id,
-    nome: prof.nome,
-    cidade: prof.cidade,
-    bairro: prof.bairro,
-    telefone: prof.telefone,
-    categorias: prof.categorias,
-    reputacaoMedia: mockReputacao(prof),
-    avaliacoes: [...prof.avaliacoes].sort((a, b) => new Date(b.dataHora) - new Date(a.dataHora)),
-  };
-}
-
-async function mockRegistrarAvaliacao({ idProfissional, idCliente, nota, comentario }) {
-  await mockDelay();
-  if (nota < 1 || nota > 5 || !comentario?.trim()) {
-    const err = new Error("Avaliação inválida.");
-    err.exception = "AvaliacaoInvalidaException";
-    throw err;
-  }
-  const prof = MOCK_PROFESSIONALS.find((p) => p.id === Number(idProfissional));
-  if (!prof) {
-    const err = new Error("Profissional não encontrado.");
-    err.exception = "ProfissionalNaoEncontradoException";
-    throw err;
-  }
-  if (idCliente && prof.id === Number(idCliente)) {
-    const err = new Error("Autoavaliação não permitida.");
-    err.exception = "AutoAvaliacaoException";
-    throw err;
-  }
-  const avaliacao = {
-    id: mockAvaliacaoSeq++,
-    cliente: state.currentUser?.nome || "Cliente demonstração",
-    nota,
-    comentario,
-    dataHora: new Date().toISOString(),
-  };
-  prof.avaliacoes.push(avaliacao);
-  return avaliacao;
-}
-
-async function mockExcluirAvaliacao(idAvaliacao) {
-  await mockDelay();
-  for (const prof of MOCK_PROFESSIONALS) {
-    const idx = prof.avaliacoes.findIndex((a) => a.id === Number(idAvaliacao));
-    if (idx >= 0) {
-      prof.avaliacoes.splice(idx, 1);
-      return { ok: true };
+/* ---------------------------------------------------------------------
+   4. "REPOSITORIES" EM MEMÓRIA (troque por chamadas HTTP ao IRepository<T> real)
+--------------------------------------------------------------------- */
+class MockDatabase {
+    constructor() {
+        this.categorias = [...seedCategorias];
+        this.profissionais = seedProfissionais.map((p) => {
+            const prof = new Profissional(p.id, p.nome, p.email, p.senha, p.telefone);
+            prof.categorias = [...p.categorias];
+            prof.configurarEndereco(new Endereco(p.endereco));
+            return prof;
+        });
+        this.clientes = seedClientes.map((c) => new Cliente(c.id, c.nome, c.email, c.senha, c.telefone));
+        this.admins = [new Administrador(seedAdmin.id, seedAdmin.nome, seedAdmin.email, seedAdmin.senha, seedAdmin.telefone)];
+        this.avaliacoes = seedAvaliacoes.map((a) => new Avaliacao(a));
+        this.proximoId = { usuario: 300, categoria: 100, avaliacao: 100 };
     }
-  }
-  const err = new Error("Avaliação não encontrada.");
-  err.exception = "OperacaoNaoPermitidaException";
-  throw err;
+    todosUsuarios() { return [...this.clientes, ...this.profissionais, ...this.admins]; }
 }
+const db = new MockDatabase();
 
-/* =========================================================
-   5. RENDERIZAÇÃO
-   ========================================================= */
-function categoriaNome(id) {
-  const cat = state.categorias.find((c) => c.id === Number(id));
-  return cat ? cat.nome : "—";
-}
+/* ---------------------------------------------------------------------
+   5. SERVICES — orquestram regras de negócio (RN01–RN10)
+   Cada método comenta a chamada fetch() equivalente para a API real.
+--------------------------------------------------------------------- */
+class UsuarioService {
+    async cadastrarUsuario({ nome, email, telefone, senha, tipo, cidade, estado }) {
+        if (!nome || !email || !telefone || !senha || !cidade || !estado) {
+            throw new DadosObrigatoriosException("nome/e-mail/telefone/senha/cidade/estado");
+        }
+        if (db.todosUsuarios().some((u) => u.getEmail() === email)) throw new EmailDuplicadoException(); // RN01
 
-function renderCategoriesInSelect() {
-  const select = document.getElementById("select-categoria");
-  state.categorias.forEach((cat) => {
-    const opt = document.createElement("option");
-    opt.value = cat.id;
-    opt.textContent = cat.nome;
-    select.appendChild(opt);
-  });
-}
+        /* fetch() real:
+        const res = await fetch(`${API_BASE_URL}/auth/cadastro`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nome, email, telefone, senha, tipo, cidade, estado }),
+        });
+        if (!res.ok) throw new GojobException((await res.json()).mensagem);
+        return res.json();
+        */
 
-function renderCategoriesList() {
-  const list = document.getElementById("categories-list");
-  list.innerHTML = "";
-  state.categorias.forEach((cat) => {
-    const count = state.profissionais.filter((p) => p.categorias?.includes(cat.id)).length;
-    const pill = document.createElement("button");
-    pill.type = "button";
-    pill.className = "category-pill";
-    pill.innerHTML = `<span>${cat.nome}</span><span class="category-pill__count">${count}</span>`;
-    pill.addEventListener("click", () => {
-      document.getElementById("select-categoria").value = cat.id;
-      document.getElementById("search-form").requestSubmit();
-      document.getElementById("buscar").scrollIntoView({ behavior: "smooth" });
-    });
-    list.appendChild(pill);
-  });
-}
-
-function renderCategoriesCheckboxes() {
-  const grid = document.getElementById("pro-categorias-grid");
-  grid.innerHTML = "";
-  state.categorias.forEach((cat) => {
-    const label = document.createElement("label");
-    label.className = "checkbox-item";
-    label.innerHTML = `<input type="checkbox" name="categorias" value="${cat.id}"><span>${cat.nome}</span>`;
-    grid.appendChild(label);
-  });
-
-  // RN05 — no máximo 3 categorias selecionáveis
-  grid.addEventListener("change", () => {
-    const checked = grid.querySelectorAll("input:checked");
-    const all = grid.querySelectorAll("input");
-    const erro = document.getElementById("pro-categorias-erro");
-    const atingiuLimite = checked.length >= 3;
-    all.forEach((input) => {
-      const item = input.closest(".checkbox-item");
-      if (!input.checked) {
-        input.disabled = atingiuLimite;
-        item.classList.toggle("is-disabled", atingiuLimite);
-      }
-    });
-    erro.classList.toggle("is-hidden", checked.length <= 3);
-  });
-}
-
-function renderProfessionalCard(prof) {
-  const template = document.getElementById("template-card-profissional");
-  const node = template.content.cloneNode(true);
-
-  node.querySelector(".pro-card__avatar").textContent = initials(prof.nome);
-  node.querySelector(".pro-card__name").textContent = prof.nome;
-  node.querySelector(".pro-card__location-text").textContent = `${prof.bairro}, ${prof.cidade}`;
-
-  const catsContainer = node.querySelector(".pro-card__categories");
-  (prof.categorias || []).slice(0, 3).forEach((catId) => {
-    const chip = document.createElement("span");
-    chip.className = "chip";
-    chip.textContent = categoriaNome(catId);
-    catsContainer.appendChild(chip);
-  });
-
-  renderStars(node.querySelector(".pro-card__stars"), prof.reputacaoMedia || 0, prof.totalAvaliacoes || 0);
-
-  node.querySelector(".pro-card__view").addEventListener("click", () => openProfileModal(prof.id));
-
-  return node;
-}
-
-function renderResults(lista) {
-  const grid = document.getElementById("results-grid");
-  const empty = document.getElementById("empty-state");
-  const meta = document.getElementById("results-meta");
-
-  grid.innerHTML = "";
-
-  if (lista.length === 0) {
-    empty.classList.remove("is-hidden");
-    meta.textContent = "";
-    return;
-  }
-  empty.classList.add("is-hidden");
-  meta.textContent = `${lista.length} profissional${lista.length === 1 ? "" : "is"} encontrado${lista.length === 1 ? "" : "s"}`;
-
-  lista.forEach((prof) => grid.appendChild(renderProfessionalCard(prof)));
-  if (window.lucide) lucide.createIcons();
-
-  if (window.gsap) {
-    gsap.from(grid.children, {
-      opacity: 0, y: 14, duration: 0.45, ease: "power2.out", stagger: 0.04,
-    });
-  }
-}
-
-function updateStatsBar() {
-  const cidades = new Set(state.profissionais.map((p) => p.cidade)).size;
-  const totalReviews = state.profissionais.reduce((acc, p) => acc + (p.totalAvaliacoes || 0), 0);
-  animateStatValue("stat-professionals", state.profissionais.length);
-  animateStatValue("stat-categories", state.categorias.length);
-  animateStatValue("stat-cities", cidades);
-  animateStatValue("stat-reviews", totalReviews);
-}
-
-function animateStatValue(id, target) {
-  const el = document.getElementById(id);
-  const obj = { val: 0 };
-  if (window.gsap) {
-    gsap.to(obj, {
-      val: target, duration: 0.8, ease: "power1.out",
-      onUpdate: () => { el.textContent = Math.round(obj.val); },
-    });
-  } else {
-    el.textContent = target;
-  }
-}
-
-/* =========================================================
-   6. MODAIS E FORMULÁRIOS
-   ========================================================= */
-function openModal(id) {
-  const modal = document.getElementById(id);
-  modal.classList.remove("is-hidden");
-  document.body.style.overflow = "hidden";
-  const firstField = modal.querySelector("input, select, textarea, button");
-  if (firstField) firstField.focus({ preventScroll: true });
-}
-function closeModal(modal) {
-  modal.classList.add("is-hidden");
-  document.body.style.overflow = "";
-}
-document.querySelectorAll("[data-close-modal]").forEach((btn) => {
-  btn.addEventListener("click", (e) => closeModal(e.target.closest(".modal-overlay")));
-});
-document.querySelectorAll(".modal-overlay").forEach((overlay) => {
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeModal(overlay); });
-});
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    document.querySelectorAll(".modal-overlay:not(.is-hidden)").forEach(closeModal);
-  }
-});
-
-/* ---- Autenticação (RF01 / RF02) ---- */
-function setAuthTab(tab) {
-  document.querySelectorAll(".modal__tab").forEach((t) => t.classList.toggle("is-active", t.dataset.tab === tab));
-  document.querySelectorAll(".auth-panel").forEach((p) => p.classList.toggle("is-active", p.dataset.panel === tab));
-  const titles = { login: "Entrar na sua conta", cliente: "Criar conta de cliente", profissional: "Criar conta de profissional" };
-  document.getElementById("auth-panel-title").textContent = titles[tab];
-}
-document.querySelectorAll("[data-auth-tab]").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    openModal("modal-auth");
-    setAuthTab(btn.dataset.authTab);
-  });
-});
-document.querySelectorAll(".modal__tab").forEach((tab) => {
-  tab.addEventListener("click", () => setAuthTab(tab.dataset.tab));
-});
-
-document.getElementById("form-login").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const form = e.target;
-  try {
-    const usuario = await API.autenticar(form.email.value.trim(), form.senha.value);
-    onLoginSuccess(usuario);
-    closeModal(document.getElementById("modal-auth"));
-    form.reset();
-  } catch (err) {
-    handleApiError(err, "Não foi possível entrar");
-  }
-});
-
-document.getElementById("form-cadastro-cliente").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  await submitCadastro(e.target, "CLIENTE");
-});
-document.getElementById("form-cadastro-profissional").addEventListener("submit", async (e) => {
-  e.preventDefault();
-
-  const categoriasSelecionadas = Array.from(
-    e.target.querySelectorAll('input[name="categorias"]:checked')
-  ).map((i) => Number(i.value));
-
-  if (categoriasSelecionadas.length === 0) {
-    toast({ type: "error", title: "Selecione ao menos uma categoria", message: "Escolha até 3 categorias de atuação." });
-    return;
-  }
-
-  await submitCadastro(e.target, "PROFISSIONAL", {
-    categorias: categoriasSelecionadas,
-    endereco: { cidade: e.target.cidade.value.trim(), bairro: e.target.bairro.value.trim() },
-  });
-});
-
-async function submitCadastro(form, tipoUsuario, extra = {}) {
-  const dto = {
-    nome: form.nome.value.trim(),
-    email: form.email.value.trim(),
-    telefone: form.telefone.value.trim(),
-    senha: form.senha.value,
-    tipoUsuario,
-    ...extra,
-  };
-  try {
-    const usuario = await API.cadastrarUsuario(dto);
-    toast({ type: "success", title: "Conta criada com sucesso", message: "Você já pode entrar com seu e-mail e senha." });
-    closeModal(document.getElementById("modal-auth"));
-    form.reset();
-    onLoginSuccess({ ...usuario, nome: dto.nome, tipoUsuario });
-  } catch (err) {
-    handleApiError(err, "Não foi possível criar a conta");
-  }
-}
-
-function onLoginSuccess(usuario) {
-  state.currentUser = usuario;
-  document.getElementById("btn-open-login").classList.add("is-hidden");
-  document.getElementById("btn-open-signup").classList.add("is-hidden");
-  const chip = document.getElementById("user-chip");
-  chip.classList.remove("is-hidden");
-  document.getElementById("user-chip-initial").textContent = initials(usuario.nome);
-  document.getElementById("user-chip-name").textContent = usuario.nome.split(" ")[0];
-  toast({ type: "success", title: `Bem-vindo(a), ${usuario.nome.split(" ")[0]}` });
-}
-
-document.getElementById("btn-logout").addEventListener("click", () => {
-  state.currentUser = null;
-  document.getElementById("btn-open-login").classList.remove("is-hidden");
-  document.getElementById("btn-open-signup").classList.remove("is-hidden");
-  document.getElementById("user-chip").classList.add("is-hidden");
-  toast({ type: "success", title: "Sessão encerrada" });
-});
-
-/* ---- Perfil público (RF10) ---- */
-async function openProfileModal(id) {
-  try {
-    const perfil = await API.obterPerfilProfissional(id);
-    state.activeProfileId = perfil.id;
-
-    document.getElementById("profile-avatar").textContent = initials(perfil.nome);
-    document.getElementById("profile-title").textContent = perfil.nome;
-    document.getElementById("profile-location").textContent = `${perfil.bairro}, ${perfil.cidade}`;
-    renderStars(document.getElementById("profile-stars"), perfil.reputacaoMedia, perfil.avaliacoes.length);
-
-    const catsEl = document.getElementById("profile-categories");
-    catsEl.innerHTML = "";
-    perfil.categorias.forEach((catId) => {
-      const chip = document.createElement("span");
-      chip.className = "chip";
-      chip.textContent = categoriaNome(catId);
-      catsEl.appendChild(chip);
-    });
-
-    document.getElementById("profile-contact").classList.add("is-hidden");
-    document.getElementById("profile-contact").textContent = `Telefone: ${perfil.telefone}`;
-
-    const list = document.getElementById("reviews-list");
-    const emptyMsg = document.getElementById("reviews-empty");
-    list.innerHTML = "";
-    document.getElementById("profile-reviews-count").textContent = `(${perfil.avaliacoes.length})`;
-
-    if (perfil.avaliacoes.length === 0) {
-      emptyMsg.classList.remove("is-hidden");
-    } else {
-      emptyMsg.classList.add("is-hidden");
-      perfil.avaliacoes.forEach((av) => {
-        const li = document.createElement("li");
-        li.className = "review-item";
-        li.innerHTML = `
-          <div class="review-item__head">
-            <span class="review-item__author">${av.cliente || "Cliente anônimo"}</span>
-            <span class="review-item__date">${formatDate(av.dataHora)}</span>
-          </div>
-          <div class="stars" data-mini-stars></div>
-          <p class="review-item__comment">${av.comentario}</p>
-        `;
-        list.appendChild(li);
-        renderStars(li.querySelector("[data-mini-stars]"), av.nota);
-      });
+        const id = db.proximoId.usuario++;
+        if (tipo === "PROFISSIONAL") {
+            const novo = new Profissional(id, nome, email, senha, telefone);
+            // Endereço inicial com apenas cidade/estado, para que a busca (RF07) já encontre o
+            // profissional; logradouro e bairro são completados depois no painel (RF06).
+            novo.endereco = new Endereco({ logradouro: "", bairro: "", cidade, estado: estado.toUpperCase() });
+            db.profissionais.push(novo);
+            return novo;
+        }
+        const novo = new Cliente(id, nome, email, senha, telefone);
+        novo.cidade = cidade; // referência de localização do cliente (não usada nas regras de busca)
+        novo.estado = estado.toUpperCase();
+        db.clientes.push(novo);
+        return novo;
     }
 
-    document.getElementById("review-subtitle").textContent = `Avaliando: ${perfil.nome}`;
-    openModal("modal-profile");
-    if (window.lucide) lucide.createIcons();
-  } catch (err) {
-    handleApiError(err, "Não foi possível abrir o perfil");
-  }
-}
+    async autenticar(email, senha) {
+        /* fetch() real:
+        const res = await fetch(`${API_BASE_URL}/auth/login`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, senha }),
+        });
+        if (!res.ok) throw new UsuarioNaoEncontradoException();
+        return res.json(); // { token, usuario }
+        */
 
-document.getElementById("btn-show-contact").addEventListener("click", () => {
-  document.getElementById("profile-contact").classList.remove("is-hidden");
-});
-
-document.getElementById("btn-open-review").addEventListener("click", () => {
-  if (!state.currentUser) {
-    toast({ type: "error", title: "Entre na sua conta", message: "É preciso estar autenticado como cliente para avaliar." });
-    openModal("modal-auth");
-    setAuthTab("login");
-    return;
-  }
-  resetStarPicker();
-  openModal("modal-review");
-});
-
-/* ---- Avaliação (RF08) ---- */
-const starPicker = document.getElementById("star-picker");
-function resetStarPicker() {
-  document.getElementById("review-nota").value = "0";
-  document.getElementById("form-review").reset();
-  starPicker.querySelectorAll(".star-picker__btn").forEach((b) => b.classList.remove("is-active"));
-  if (window.lucide) lucide.createIcons();
-}
-starPicker.addEventListener("click", (e) => {
-  const btn = e.target.closest(".star-picker__btn");
-  if (!btn) return;
-  const value = Number(btn.dataset.value);
-  document.getElementById("review-nota").value = value;
-  starPicker.querySelectorAll(".star-picker__btn").forEach((b) => {
-    b.classList.toggle("is-active", Number(b.dataset.value) <= value);
-  });
-});
-
-document.getElementById("form-review").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const nota = Number(document.getElementById("review-nota").value);
-  const comentario = document.getElementById("review-comentario").value.trim();
-
-  if (nota < 1 || nota > 5) {
-    toast({ type: "error", title: "Selecione uma nota", message: "Escolha de 1 a 5 estrelas antes de enviar." });
-    return;
-  }
-  if (!comentario) {
-    toast({ type: "error", title: "Comentário obrigatório", message: "Conte brevemente como foi o serviço." });
-    return;
-  }
-
-  try {
-    await API.registrarAvaliacao({
-      idProfissional: state.activeProfileId,
-      idCliente: state.currentUser?.id,
-      nota,
-      comentario,
-    });
-    toast({ type: "success", title: "Avaliação registrada", message: "A reputação do profissional foi atualizada." });
-    closeModal(document.getElementById("modal-review"));
-    openProfileModal(state.activeProfileId); // recarrega com reputação recalculada (RF11)
-    runSearch(); // atualiza a lista de resultados em segundo plano
-  } catch (err) {
-    handleApiError(err, "Não foi possível registrar a avaliação");
-  }
-});
-
-/* =========================================================
-   7. BUSCA (RF07)
-   ========================================================= */
-async function runSearch() {
-  const cidade = document.getElementById("input-cidade").value.trim();
-  const categoria = document.getElementById("select-categoria").value;
-  const bairro = document.getElementById("input-bairro").value.trim();
-
-  const meta = document.getElementById("results-meta");
-  meta.textContent = "Buscando...";
-
-  try {
-    const resultado = await API.buscarProfissionais({ cidade, categoria, bairro });
-    state.profissionais = resultado;
-    renderResults(resultado);
-  } catch (err) {
-    handleApiError(err, "Não foi possível concluir a busca");
-    renderResults([]);
-  }
-}
-
-document.getElementById("search-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  runSearch();
-});
-
-/* =========================================================
-   8. ANIMAÇÕES — Lenis (scroll suave) + GSAP (revelações)
-   ========================================================= */
-function initSmoothScrollAndReveals() {
-  if (window.Lenis) {
-    const lenis = new Lenis({ duration: 1.1, smoothWheel: true });
-    function raf(time) { lenis.raf(time); requestAnimationFrame(raf); }
-    requestAnimationFrame(raf);
-    if (window.gsap && window.ScrollTrigger) {
-      lenis.on("scroll", ScrollTrigger.update);
-      gsap.ticker.add((time) => lenis.raf(time * 1000));
-      gsap.ticker.lagSmoothing(0);
+        const usuario = db.todosUsuarios().find((u) => u.getEmail() === email);
+        if (!usuario || !usuario.autenticar(senha)) throw new UsuarioNaoEncontradoException(); // RF02
+        return { token: "demo-jwt-token", usuario };
     }
-  }
+}
 
-  if (window.gsap && window.ScrollTrigger) {
-    gsap.registerPlugin(ScrollTrigger);
-    document.querySelectorAll("[data-reveal]").forEach((el) => {
-      gsap.from(el, {
-        opacity: 0,
-        y: 24,
-        duration: 0.7,
-        ease: "power2.out",
-        scrollTrigger: { trigger: el, start: "top 88%", once: true },
-      });
+class CategoriaService {
+    listarAtivas() {
+        /* fetch(`${API_BASE_URL}/categorias?ativa=true`) */
+        return db.categorias.filter((c) => c.estaAtiva());
+    }
+    listarTodas() { return db.categorias; }
+
+    criarCategoria(nome, descricao, solicitante) {
+        if (solicitante?.tipo !== "ADMIN") throw new OperacaoNaoPermitidaException(); // RN08
+        if (!nome) throw new DadosObrigatoriosException("nome");
+        const nova = new Categoria(db.proximoId.categoria++, nome, descricao, true);
+        db.categorias.push(nova);
+        /* fetch(`${API_BASE_URL}/categorias`, { method: "POST", body: JSON.stringify({ nome, descricao }) }) */
+        return nova;
+    }
+    editarCategoria(id, nome, descricao, solicitante) {
+        if (solicitante?.tipo !== "ADMIN") throw new OperacaoNaoPermitidaException();
+        const cat = db.categorias.find((c) => c.id === id);
+        if (!cat) throw new GojobException("Categoria não encontrada.");
+        cat.nome = nome;
+        cat.descricao = descricao;
+        /* fetch(`${API_BASE_URL}/categorias/${id}`, { method: "PUT", body: JSON.stringify({ nome, descricao }) }) */
+        return cat;
+    }
+    inativarCategoria(id, solicitante) {
+        if (solicitante?.tipo !== "ADMIN") throw new OperacaoNaoPermitidaException();
+        const cat = db.categorias.find((c) => c.id === id);
+        if (!cat) throw new GojobException("Categoria não encontrada.");
+        cat.inativar(); // RF05
+        /* fetch(`${API_BASE_URL}/categorias/${id}/inativar`, { method: "PATCH" }) */
+    }
+}
+
+class ProfissionalService {
+    // Sobrecarga simulada via parâmetros opcionais (Parte 6.5 da documentação)
+    buscarProfissionais(cidade, categoriaId = null, bairro = null) {
+        if (!cidade) throw new DadosObrigatoriosException("cidade");
+        if (categoriaId) {
+            const cat = db.categorias.find((c) => c.id === Number(categoriaId));
+            if (cat && !cat.estaAtiva()) throw new CategoriaInativaException(cat.nome); // RN02
+        }
+        /* fetch(`${API_BASE_URL}/profissionais?cidade=${cidade}&categoriaId=${categoriaId ?? ""}&bairro=${bairro ?? ""}`) */
+        return db.profissionais.filter((p) => {
+            if (!p.ativo) return false;
+            const okCidade = p.endereco.cidade.toLowerCase().includes(cidade.toLowerCase());
+            const okCategoria = !categoriaId || p.categorias.includes(Number(categoriaId));
+            const okBairro = !bairro || p.endereco.bairro.toLowerCase().includes(bairro.toLowerCase());
+            return okCidade && okCategoria && okBairro;
+        }).map((p) => {
+            p.calcularReputacao(db.avaliacoes.filter((a) => a.idProfissional === p.id));
+            return p;
+        });
+    }
+
+    buscarPorId(id) {
+        /* fetch(`${API_BASE_URL}/profissionais/${id}`) */
+        const p = db.profissionais.find((pr) => pr.id === id);
+        if (!p) throw new ProfissionalNaoEncontradoException();
+        p.calcularReputacao(db.avaliacoes.filter((a) => a.idProfissional === id));
+        return p;
+    }
+
+    configurarPerfil(idProfissional, { categoriaIds, endereco }) {
+        const profissional = this.buscarPorId(idProfissional);
+        if (categoriaIds.length > 3) throw new LimiteCategoriasException(); // RN05
+        profissional.categorias = [];
+        categoriaIds.forEach((cid) => {
+            const categoria = db.categorias.find((c) => c.id === cid);
+            profissional.adicionarCategoria(categoria);
+        });
+        profissional.configurarEndereco(new Endereco(endereco));
+        /* fetch(`${API_BASE_URL}/profissionais/${idProfissional}/perfil`, { method: "PUT", body: JSON.stringify({ categoriaIds, endereco }) }) */
+        return profissional;
+    }
+
+    inativarConta(idProfissional, solicitante) {
+        if (solicitante?.tipo !== "ADMIN") throw new OperacaoNaoPermitidaException();
+        const profissional = this.buscarPorId(idProfissional);
+        profissional.ativo = false;
+        db.avaliacoes.filter((a) => a.idProfissional === idProfissional).forEach((a) => a.anonimizar()); // RN10
+        /* fetch(`${API_BASE_URL}/profissionais/${idProfissional}/inativar`, { method: "PATCH" }) */
+    }
+}
+
+class AvaliacaoService {
+    constructor(profissionalService) { this.profissionalService = profissionalService; }
+
+    listarPorProfissional(idProfissional) {
+        /* fetch(`${API_BASE_URL}/profissionais/${idProfissional}/avaliacoes`) */
+        return db.avaliacoes.filter((a) => a.idProfissional === idProfissional).sort((a, b) => new Date(b.dataHora) - new Date(a.dataHora));
+    }
+
+    registrarAvaliacao({ idCliente, idProfissional, nota, comentario }) {
+        if (idCliente === idProfissional) throw new AutoAvaliacaoException(); // RN09
+        if (!nota || nota < 1 || nota > 5 || !comentario) throw new AvaliacaoInvalidaException(); // RN06
+        this.profissionalService.buscarPorId(idProfissional); // valida existência (RN03)
+
+        const avaliacao = new Avaliacao({
+            id: db.proximoId.avaliacao++,
+            idCliente, idProfissional, nota, comentario,
+            dataHora: new Date().toISOString(),
+        });
+        db.avaliacoes.push(avaliacao);
+        /* fetch(`${API_BASE_URL}/avaliacoes`, { method: "POST", body: JSON.stringify({ idProfissional, nota, comentario }) }) */
+        return avaliacao;
+    }
+
+    excluirAvaliacao(idAvaliacao, idCliente) {
+        const avaliacao = db.avaliacoes.find((a) => a.id === idAvaliacao);
+        if (!avaliacao || avaliacao.idCliente !== idCliente) throw new OperacaoNaoPermitidaException(); // RN06
+        db.avaliacoes = db.avaliacoes.filter((a) => a.id !== idAvaliacao);
+        /* fetch(`${API_BASE_URL}/avaliacoes/${idAvaliacao}`, { method: "DELETE" }) */
+    }
+}
+
+/* Instâncias únicas dos serviços, injetadas na camada de apresentação */
+const usuarioService = new UsuarioService();
+const categoriaService = new CategoriaService();
+const profissionalService = new ProfissionalService();
+const avaliacaoService = new AvaliacaoService(profissionalService);
+
+/* ---------------------------------------------------------------------
+   6. HELPERS DE UI (toasts, animações GSAP)
+--------------------------------------------------------------------- */
+function toastSucesso(mensagem) {
+    Swal.fire({
+        toast: true, position: "top-end", timer: 2800, showConfirmButton: false,
+        icon: "success", title: mensagem, background: "#191C1A", color: "#F5F4F0",
+        iconColor: "#4FC189",
     });
-  }
 }
-
-/* =========================================================
-   9. INICIALIZAÇÃO
-   ========================================================= */
-async function checkApiStatus() {
-  const dot = document.getElementById("api-status-dot");
-  const label = document.getElementById("api-status-label");
-  const wrapper = document.getElementById("api-status");
-
-  const online = await API.healthcheck();
-  state.apiOnline = online;
-  state.usingMockData = !online;
-
-  wrapper.classList.toggle("is-online", online);
-  wrapper.classList.toggle("is-offline", false);
-  label.textContent = online ? "API conectada" : "modo demonstração";
-  wrapper.title = online
-    ? "Conectado à API C# em " + CONFIG.API_BASE_URL
-    : "API C# não encontrada — exibindo dados de demonstração locais";
-}
-
-async function bootstrap() {
-  if (window.lucide) lucide.createIcons();
-
-  await checkApiStatus();
-
-  try {
-    state.categorias = await API.listarCategorias();
-    renderCategoriesInSelect();
-    renderCategoriesCheckboxes();
-  } catch (err) {
-    handleApiError(err, "Não foi possível carregar as categorias");
-  }
-
-  try {
-    state.profissionais = await API.buscarProfissionais({ cidade: "" });
-  } catch (_) {
-    state.profissionais = [];
-  }
-
-  renderCategoriesList();
-  updateStatsBar();
-  renderResults(state.profissionais);
-
-  initSmoothScrollAndReveals();
-
-  if (state.usingMockData) {
-    toast({
-      type: "success",
-      title: "Modo demonstração ativo",
-      message: "A API C# não foi encontrada em " + CONFIG.API_BASE_URL + ". Exibindo dados de exemplo.",
-      duration: 7000,
+function toastErro(mensagem) {
+    Swal.fire({
+        toast: true, position: "top-end", timer: 3200, showConfirmButton: false,
+        icon: "error", title: mensagem, background: "#191C1A", color: "#F5F4F0",
+        iconColor: "#CE9A3E",
     });
-  }
+}
+function confirmarAcao(titulo, texto) {
+    return Swal.fire({
+        title: titulo, text: texto, icon: "warning", showCancelButton: true,
+        confirmButtonText: "Confirmar", cancelButtonText: "Cancelar",
+        background: "#191C1A", color: "#F5F4F0",
+        confirmButtonColor: "#CE9A3E", cancelButtonColor: "#2A2E2B",
+    }).then((r) => r.isConfirmed);
 }
 
-document.addEventListener("DOMContentLoaded", bootstrap);
+/* ---------------------------------------------------------------------
+   7. APP ALPINE — estado de tela e ligação com os serviços
+--------------------------------------------------------------------- */
+function gojobApp() {
+    return {
+        /* estado geral */
+        view: "home",
+        mobileMenu: false,
+        categorias: db.categorias,
+        profissionais: db.profissionais,
+        resultados: [],
+        search: { categoriaId: "", cidade: "", bairro: "" },
+
+        session: { logado: false, id: null, role: null, nome: null },
+
+        authModal: { open: false, tab: "login" },
+        loginForm: { email: "", senha: "" },
+        cadastroForm: { nome: "", email: "", telefone: "", senha: "", cidade: "", estado: "", tipo: "CLIENTE" },
+
+        perfilAberto: false,
+        perfilAtual: null,
+        novaAvaliacao: { nota: 0, comentario: "" },
+
+        dash: { categorias: [], endereco: { logradouro: "", bairro: "", cidade: "", estado: "" } },
+        dashCategoriaAviso: "",
+
+        categoriaModal: { open: false, id: null, nome: "", descricao: "" },
+
+        /* ---------------- ciclo de vida ---------------- */
+        init() {
+            this.atualizarSessaoUI();
+            this.$nextTick(() => {
+                lucide.createIcons();
+                this.animarEntradaHero();
+            });
+            this.$watch("view", () => this.$nextTick(() => lucide.createIcons()));
+            this.$watch("perfilAberto", () => this.$nextTick(() => lucide.createIcons()));
+            this.$watch("authModal.open", () => this.$nextTick(() => lucide.createIcons()));
+            this.$watch("cadastroForm.tipo", () => this.$nextTick(() => lucide.createIcons()));
+            this.$watch("session.logado", () => this.$nextTick(() => lucide.createIcons()));
+            this.$watch("resultados", () => this.$nextTick(() => { lucide.createIcons(); this.animarCards(); }));
+        },
+
+        animarEntradaHero() {
+            if (!window.gsap) return;
+            gsap.from(".hero-headline", { y: 18, opacity: 0, duration: 0.7, ease: "power2.out" });
+            gsap.from(".hero-search", { y: 14, opacity: 0, duration: 0.7, delay: 0.12, ease: "power2.out" });
+            gsap.utils.toArray(".how-card").forEach((el, i) => {
+                gsap.to(el, {
+                    opacity: 1, y: 0, duration: 0.6, delay: i * 0.08, ease: "power2.out",
+                    scrollTrigger: { trigger: el, start: "top 88%" },
+                    onStart: () => el.classList.add("revealed"),
+                });
+            });
+        },
+        animarCards() {
+            if (!window.gsap) return;
+            const cards = document.querySelectorAll("#cards-grid .prof-card");
+            gsap.to(cards, {
+                opacity: 1, y: 0, duration: 0.45, stagger: 0.06, ease: "power2.out",
+                onStart: () => cards.forEach((c) => c.classList.add("revealed")),
+            });
+        },
+
+        /* ---------------- navegação ---------------- */
+        setView(v) { this.view = v; window.scrollTo({ top: 0, behavior: "smooth" }); },
+        goHome() { this.view = "home"; this.mobileMenu = false; window.scrollTo({ top: 0, behavior: "smooth" }); },
+        scrollToHow() {
+            this.view = "home";
+            this.$nextTick(() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" }));
+        },
+        roleLabel(role) { return { CLIENTE: "Cliente", PROFISSIONAL: "Profissional", ADMIN: "Administrador" }[role] || ""; },
+
+        /* ---------------- categorias (helpers) ---------------- */
+        categoriasAtivas() { return this.categorias.filter((c) => c.ativa); },
+        nomeCategoria(id) { return this.categorias.find((c) => c.id === id)?.nome || ""; },
+
+        /* ---------------- busca (RF07) ---------------- */
+        buscarProfissionais() {
+            try {
+                this.resultados = profissionalService.buscarProfissionais(this.search.cidade, this.search.categoriaId || null, this.search.bairro || null);
+                this.view = "resultados";
+                window.scrollTo({ top: 0, behavior: "smooth" });
+            } catch (e) {
+                toastErro(e.message);
+            }
+        },
+        resultadosTitulo() {
+            const catNome = this.search.categoriaId ? this.nomeCategoria(Number(this.search.categoriaId)) : "Profissionais";
+            return `${catNome} em ${this.search.cidade}`;
+        },
+        iniciais(nome) { return nome.split(" ").filter(Boolean).slice(0, 2).map((n) => n[0]).join("").toUpperCase(); },
+
+        /* ---------------- perfil público (RF10, RF08, RF09) ---------------- */
+        abrirPerfil(id) {
+            try {
+                this.perfilAtual = profissionalService.buscarPorId(id);
+                this.novaAvaliacao = { nota: 0, comentario: "" };
+                this.perfilAberto = true;
+            } catch (e) { toastErro(e.message); }
+        },
+        fecharPerfil() { this.perfilAberto = false; },
+        avaliacoesDoAtual() { return this.perfilAtual ? avaliacaoService.listarPorProfissional(this.perfilAtual.id) : []; },
+        nomeCliente(id) { return db.clientes.find((c) => c.getId() === id)?.getNome() || "Cliente"; },
+        formatarData(iso) { return new Date(iso).toLocaleDateString("pt-BR"); },
+
+        registrarAvaliacao() {
+            try {
+                avaliacaoService.registrarAvaliacao({
+                    idCliente: this.session.id,
+                    idProfissional: this.perfilAtual.id,
+                    nota: this.novaAvaliacao.nota,
+                    comentario: this.novaAvaliacao.comentario.trim(),
+                });
+                this.perfilAtual = profissionalService.buscarPorId(this.perfilAtual.id); // recalcula reputação (RF11)
+                this.novaAvaliacao = { nota: 0, comentario: "" };
+                toastSucesso("Avaliação registrada com sucesso.");
+            } catch (e) { toastErro(e.message); }
+        },
+        async excluirAvaliacao(idAvaliacao) {
+            const ok = await confirmarAcao("Excluir avaliação?", "Esta ação não pode ser desfeita.");
+            if (!ok) return;
+            try {
+                avaliacaoService.excluirAvaliacao(idAvaliacao, this.session.id);
+                this.perfilAtual = profissionalService.buscarPorId(this.perfilAtual.id);
+                toastSucesso("Avaliação excluída.");
+            } catch (e) { toastErro(e.message); }
+        },
+
+        /* ---------------- autenticação (RF01, RF02) ---------------- */
+        openAuth(tab) { this.authModal = { open: true, tab }; },
+        closeAuth() { this.authModal.open = false; },
+
+        async autenticar() {
+            try {
+                const { token, usuario } = await usuarioService.autenticar(this.loginForm.email, this.loginForm.senha);
+                this.salvarSessao(usuario, token);
+                this.atualizarSessaoUI();
+                this.closeAuth();
+                this.loginForm = { email: "", senha: "" };
+                toastSucesso(`Bem-vindo(a), ${this.primeiroNome(usuario.getNome())}!`);
+            } catch (e) { toastErro(e.message); }
+        },
+
+        async cadastrar() {
+            try {
+                const usuario = await usuarioService.cadastrarUsuario(this.cadastroForm);
+                this.salvarSessao(usuario, "demo-jwt-token");
+                this.atualizarSessaoUI();
+                if (usuario.tipo === "PROFISSIONAL") this.profissionais = db.profissionais;
+                this.closeAuth();
+                const tipoCadastrado = this.cadastroForm.tipo;
+                this.cadastroForm = { nome: "", email: "", telefone: "", senha: "", cidade: "", estado: "", tipo: "CLIENTE" };
+
+                if (tipoCadastrado === "PROFISSIONAL") {
+                    Swal.fire({
+                        title: "Conta criada com sucesso!",
+                        text: "Agora configure até 3 categorias de atuação no seu painel para começar a aparecer nas buscas de clientes.",
+                        icon: "success", background: "#191C1A", color: "#F5F4F0",
+                        iconColor: "#4FC189", confirmButtonColor: "#2F9E6E",
+                        confirmButtonText: "Ir para meu painel",
+                    }).then(() => this.setView("dashboard"));
+                } else {
+                    toastSucesso("Conta criada com sucesso! Bem-vindo(a) ao GOJOB.");
+                }
+            } catch (e) { toastErro(e.message); }
+        },
+
+        /* ---------------- gerenciamento de sessão (localStorage) ---------------- */
+        salvarSessao(usuario, token) {
+            const dadosUsuario = { id: usuario.getId(), nome: usuario.getNome(), role: usuario.tipo };
+            localStorage.setItem(STORAGE_TOKEN_KEY, token);
+            localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(dadosUsuario));
+        },
+
+        atualizarSessaoUI() {
+            const token = localStorage.getItem(STORAGE_TOKEN_KEY);
+            const dadosUsuario = localStorage.getItem(STORAGE_USER_KEY);
+
+            if (!token || !dadosUsuario) {
+                this.session = { logado: false, id: null, role: null, nome: null };
+                return;
+            }
+
+            const { id, nome, role } = JSON.parse(dadosUsuario);
+            this.session = { logado: true, id, role, nome };
+
+            if (role === "PROFISSIONAL") {
+                try {
+                    const profissional = profissionalService.buscarPorId(id);
+                    this.dash.categorias = [...profissional.categorias];
+                    this.dash.endereco = { ...profissional.endereco };
+                } catch {
+                    // Conta não encontrada na base local (ex.: após recarregar a página em modo prévia);
+                    // o cabeçalho continua refletindo a sessão salva e o painel parte de campos em branco.
+                    this.dash.categorias = [];
+                    this.dash.endereco = { logradouro: "", bairro: "", cidade: "", estado: "" };
+                }
+            }
+        },
+
+        fazerLogout() {
+            localStorage.removeItem(STORAGE_TOKEN_KEY);
+            localStorage.removeItem(STORAGE_USER_KEY);
+            this.atualizarSessaoUI();
+            this.mobileMenu = false;
+            this.goHome();
+            toastSucesso("Sessão encerrada com sucesso!");
+        },
+
+        primeiroNome(nome) { return (nome || "").split(" ")[0]; },
+        temPainel() { return this.session.role === "PROFISSIONAL" || this.session.role === "ADMIN"; },
+        irParaPainel() {
+            if (this.session.role === "PROFISSIONAL") this.setView("dashboard");
+            else if (this.session.role === "ADMIN") this.setView("admin");
+        },
+
+        /* ---------------- dashboard do profissional (RF06) ---------------- */
+        toggleCategoriaDashboard(id) {
+            this.dashCategoriaAviso = "";
+            if (this.dash.categorias.includes(id)) {
+                this.dash.categorias = this.dash.categorias.filter((c) => c !== id);
+                return;
+            }
+            if (this.dash.categorias.length >= 3) {
+                this.dashCategoriaAviso = "Limite de 3 categorias atingido. Remova uma para adicionar outra.";
+                return;
+            }
+            this.dash.categorias.push(id);
+        },
+        salvarPerfilProfissional() {
+            try {
+                profissionalService.configurarPerfil(this.session.id, { categoriaIds: this.dash.categorias, endereco: this.dash.endereco });
+                toastSucesso("Perfil profissional atualizado.");
+            } catch (e) { toastErro(e.message); }
+        },
+        minhasAvaliacoes() { return this.session.id ? avaliacaoService.listarPorProfissional(this.session.id) : []; },
+        minhaReputacao() {
+            const avs = this.minhasAvaliacoes();
+            if (avs.length === 0) return 0;
+            return avs.reduce((acc, a) => acc + a.nota, 0) / avs.length;
+        },
+
+        /* ---------------- painel administrador (RF03–RF05, RF12) ---------------- */
+        abrirModalCategoria(id = null) {
+            if (id) {
+                const cat = this.categorias.find((c) => c.id === id);
+                this.categoriaModal = { open: true, id, nome: cat.nome, descricao: cat.descricao };
+            } else {
+                this.categoriaModal = { open: true, id: null, nome: "", descricao: "" };
+            }
+        },
+        salvarCategoria() {
+            try {
+                const admin = { tipo: this.session.role };
+                if (this.categoriaModal.id) {
+                    categoriaService.editarCategoria(this.categoriaModal.id, this.categoriaModal.nome, this.categoriaModal.descricao, admin);
+                    toastSucesso("Categoria atualizada.");
+                } else {
+                    categoriaService.criarCategoria(this.categoriaModal.nome, this.categoriaModal.descricao, admin);
+                    toastSucesso("Categoria criada.");
+                }
+                this.categoriaModal.open = false;
+            } catch (e) { toastErro(e.message); }
+        },
+        async inativarCategoria(id) {
+            const ok = await confirmarAcao("Inativar categoria?", "Ela deixará de aparecer em novas buscas e vínculos.");
+            if (!ok) return;
+            try {
+                categoriaService.inativarCategoria(id, { tipo: this.session.role });
+                toastSucesso("Categoria inativada.");
+            } catch (e) { toastErro(e.message); }
+        },
+        async inativarProfissional(id) {
+            const ok = await confirmarAcao("Inativar conta do profissional?", "As avaliações vinculadas serão anonimizadas.");
+            if (!ok) return;
+            try {
+                profissionalService.inativarConta(id, { tipo: this.session.role });
+                toastSucesso("Conta inativada e avaliações anonimizadas.");
+            } catch (e) { toastErro(e.message); }
+        },
+    };
+}
