@@ -8,7 +8,7 @@
         public string Cidade {  get; set; } = string.Empty;
         public string Estado { get;set; } = string.Empty;
 
-        public int UsuarioId { get; set; };
+        public int UsuarioId { get; set; }
         public Usuario? Usuario { get; set; }
 
         public bool ValidarCamposObrigatorios()
