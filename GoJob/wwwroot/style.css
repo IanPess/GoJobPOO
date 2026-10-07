@@ -61,6 +61,10 @@ body {
 .hero-headline {
     text-wrap: balance;
 }
+.hero-search {
+    opacity: 1 !important;
+    transform: none !important;
+}
 
 @media (min-width: 640px) {
     .hero-headline {
@@ -107,4 +111,21 @@ textarea:focus-visible {
     .how-card.revealed {
         opacity: 1;
         transform: none;
+    }
+/* Força a visibilidade e cores do formulário de pesquisa */
+form.hero-search {
+    display: flex !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: none !important;
+    background-color: #141715 !important;
+    border: 1px solid #28302b !important;
+}
+
+    form.hero-search input,
+    form.hero-search select,
+    form.hero-search button {
+        opacity: 1 !important;
+        visibility: visible !important;
+        color: #f5f4f0 !important;
     }

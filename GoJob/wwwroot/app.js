@@ -241,46 +241,49 @@ class UsuarioService {
         if (!nome || !email || !telefone || !senha || !cidade || !estado) {
             throw new DadosObrigatoriosException("nome/e-mail/telefone/senha/cidade/estado");
         }
-        if (db.todosUsuarios().some((u) => u.getEmail() === email)) throw new EmailDuplicadoException(); // RN01
 
-        /* fetch() real:
-        const res = await fetch(`${API_BASE_URL}/auth/cadastro`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ nome, email, telefone, senha, tipo, cidade, estado }),
+        const res = await fetch(`${API_BASE_URL}/auth/cadastrar`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nome, email, telefone, senha, tipoUsuario: tipo, cidade, estado }),
         });
-        if (!res.ok) throw new GojobException((await res.json()).mensagem);
-        return res.json();
-        */
 
-        const id = db.proximoId.usuario++;
-        if (tipo === "PROFISSIONAL") {
-            const novo = new Profissional(id, nome, email, senha, telefone);
-            // Endereço inicial com apenas cidade/estado, para que a busca (RF07) já encontre o
-            // profissional; logradouro e bairro são completados depois no painel (RF06).
-            novo.endereco = new Endereco({ logradouro: "", bairro: "", cidade, estado: estado.toUpperCase() });
-            db.profissionais.push(novo);
-            return novo;
+        if (!res.ok) {
+            const erro = await res.json();
+            throw new GojobException(erro.mensagem);
         }
-        const novo = new Cliente(id, nome, email, senha, telefone);
-        novo.cidade = cidade; // referência de localização do cliente (não usada nas regras de busca)
-        novo.estado = estado.toUpperCase();
-        db.clientes.push(novo);
-        return novo;
+
+        return await res.json();
     }
 
+    // AQUI FICA O AUTENTICAR:
     async autenticar(email, senha) {
-        /* fetch() real:
         const res = await fetch(`${API_BASE_URL}/auth/login`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, senha }),
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, senha }),
         });
-        if (!res.ok) throw new UsuarioNaoEncontradoException();
-        return res.json(); // { token, usuario }
-        */
 
-        const usuario = db.todosUsuarios().find((u) => u.getEmail() === email);
-        if (!usuario || !usuario.autenticar(senha)) throw new UsuarioNaoEncontradoException(); // RF02
-        return { token: "demo-jwt-token", usuario };
+        if (!res.ok) {
+            const erro = await res.json();
+            throw new UsuarioNaoEncontradoException(erro.mensagem || "E-mail ou senha inválidos.");
+        }
+
+        const dados = await res.json();
+
+        // Retorna o objeto com a estrutura que o Alpine.js espera guardar na sessão
+        return {
+            token: "jwt-token-real",
+            usuario: {
+                id: dados.id,
+                nome: dados.nome,
+                email: dados.email,
+                tipo: dados.tipo.toUpperCase(), // "CLIENTE" ou "PROFISSIONAL"
+                getId: () => dados.id,
+                getNome: () => dados.nome,
+                getEmail: () => dados.email
+            }
+        };
     }
 }
 
@@ -463,35 +466,35 @@ function gojobApp() {
         init() {
             this.atualizarSessaoUI();
             this.$nextTick(() => {
-                lucide.createIcons();
-                this.animarEntradaHero();
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons();
+                }
+                // this.animarEntradaHero(); // Desativado para a barra de pesquisa não ficar invisível
             });
-            this.$watch("view", () => this.$nextTick(() => lucide.createIcons()));
-            this.$watch("perfilAberto", () => this.$nextTick(() => lucide.createIcons()));
-            this.$watch("authModal.open", () => this.$nextTick(() => lucide.createIcons()));
-            this.$watch("cadastroForm.tipo", () => this.$nextTick(() => lucide.createIcons()));
-            this.$watch("session.logado", () => this.$nextTick(() => lucide.createIcons()));
-            this.$watch("resultados", () => this.$nextTick(() => { lucide.createIcons(); this.animarCards(); }));
+            this.$watch("view", () => this.$nextTick(() => typeof lucide !== 'undefined' && lucide.createIcons()));
+            this.$watch("perfilAberto", () => this.$nextTick(() => typeof lucide !== 'undefined' && lucide.createIcons()));
+            this.$watch("authModal.open", () => this.$nextTick(() => typeof lucide !== 'undefined' && lucide.createIcons()));
+            this.$watch("cadastroForm.tipo", () => this.$nextTick(() => typeof lucide !== 'undefined' && lucide.createIcons()));
+            this.$watch("session.logado", () => this.$nextTick(() => typeof lucide !== 'undefined' && lucide.createIcons()));
+            this.$watch("resultados", () => this.$nextTick(() => {
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+                this.animarCards();
+            }));
         },
 
         animarEntradaHero() {
-            if (!window.gsap) return;
-            gsap.from(".hero-headline", { y: 18, opacity: 0, duration: 0.7, ease: "power2.out" });
-            gsap.from(".hero-search", { y: 14, opacity: 0, duration: 0.7, delay: 0.12, ease: "power2.out" });
-            gsap.utils.toArray(".how-card").forEach((el, i) => {
-                gsap.to(el, {
-                    opacity: 1, y: 0, duration: 0.6, delay: i * 0.08, ease: "power2.out",
-                    scrollTrigger: { trigger: el, start: "top 88%" },
-                    onStart: () => el.classList.add("revealed"),
-                });
-            });
+            const heroSearch = document.querySelector(".hero-search");
+            if (heroSearch) {
+                heroSearch.style.opacity = "1";
+                heroSearch.style.transform = "none";
+            }
         },
         animarCards() {
-            if (!window.gsap) return;
             const cards = document.querySelectorAll("#cards-grid .prof-card");
-            gsap.to(cards, {
-                opacity: 1, y: 0, duration: 0.45, stagger: 0.06, ease: "power2.out",
-                onStart: () => cards.forEach((c) => c.classList.add("revealed")),
+            cards.forEach((c) => {
+                c.style.opacity = "1";
+                c.style.transform = "none";
+                c.classList.add("revealed");
             });
         },
 
