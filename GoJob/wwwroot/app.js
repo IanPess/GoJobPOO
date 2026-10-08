@@ -6,7 +6,7 @@
    para facilitar a troca por uma integração real.
    ===================================================================== */
 
-const API_BASE_URL = "https://localhost:5001/api"; // ajuste para a URL da sua API ASP.NET Core
+const API_BASE_URL = '/api'; // ajuste para a URL da sua API ASP.NET Core
 const STORAGE_TOKEN_KEY = "gojob_token";
 const STORAGE_USER_KEY = "gojob_user";
 
@@ -237,53 +237,56 @@ const db = new MockDatabase();
    Cada método comenta a chamada fetch() equivalente para a API real.
 --------------------------------------------------------------------- */
 class UsuarioService {
-    async cadastrarUsuario({ nome, email, telefone, senha, tipo, cidade, estado }) {
-        if (!nome || !email || !telefone || !senha || !cidade || !estado) {
-            throw new DadosObrigatoriosException("nome/e-mail/telefone/senha/cidade/estado");
+    async cadastrarUsuario({ nome, email, telefone, senha, tipo, cidade, estado, descricao, categoriaId }) {
+        if (!nome || !email || !telefone || !senha) {
+            throw new DadosObrigatoriosException("nome/e-mail/telefone/senha");
         }
 
         const res = await fetch(`${API_BASE_URL}/auth/cadastrar`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ nome, email, telefone, senha, tipoUsuario: tipo, cidade, estado }),
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                nome,
+                email,
+                telefone,
+                senha,
+                tipoUsuario: tipo,
+                cidade,
+                estado,
+                descricao,
+                categoriaId: categoriaId ? parseInt(categoriaId) : null
+            })
         });
 
         if (!res.ok) {
             const erro = await res.json();
-            throw new GojobException(erro.mensagem);
+            throw new GojobException(erro.mensagem || "Erro ao realizar o cadastro.");
         }
 
         return await res.json();
     }
 
-    // AQUI FICA O AUTENTICAR:
     async autenticar(email, senha) {
+        if (!email || !senha) {
+            throw new DadosObrigatoriosException("e-mail/senha");
+        }
+
         const res = await fetch(`${API_BASE_URL}/auth/login`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, senha }),
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ email, senha })
         });
 
         if (!res.ok) {
             const erro = await res.json();
-            throw new UsuarioNaoEncontradoException(erro.mensagem || "E-mail ou senha inválidos.");
+            throw new GojobException(erro.mensagem || "E-mail ou senha inválidos.");
         }
 
-        const dados = await res.json();
-
-        // Retorna o objeto com a estrutura que o Alpine.js espera guardar na sessão
-        return {
-            token: "jwt-token-real",
-            usuario: {
-                id: dados.id,
-                nome: dados.nome,
-                email: dados.email,
-                tipo: dados.tipo.toUpperCase(), // "CLIENTE" ou "PROFISSIONAL"
-                getId: () => dados.id,
-                getNome: () => dados.nome,
-                getEmail: () => dados.email
-            }
-        };
+        return await res.json();
     }
 }
 
@@ -321,53 +324,42 @@ class CategoriaService {
 }
 
 class ProfissionalService {
-    // Sobrecarga simulada via parâmetros opcionais (Parte 6.5 da documentação)
-    buscarProfissionais(cidade, categoriaId = null, bairro = null) {
-        if (!cidade) throw new DadosObrigatoriosException("cidade");
-        if (categoriaId) {
-            const cat = db.categorias.find((c) => c.id === Number(categoriaId));
-            if (cat && !cat.estaAtiva()) throw new CategoriaInativaException(cat.nome); // RN02
+    async buscarPorId(id) {
+        const res = await fetch(`${API_BASE_URL}/profissionais/${id}`);
+        if (!res.ok) {
+            throw new ProfissionalNaoEncontradoException();
         }
-        /* fetch(`${API_BASE_URL}/profissionais?cidade=${cidade}&categoriaId=${categoriaId ?? ""}&bairro=${bairro ?? ""}`) */
-        return db.profissionais.filter((p) => {
-            if (!p.ativo) return false;
-            const okCidade = p.endereco.cidade.toLowerCase().includes(cidade.toLowerCase());
-            const okCategoria = !categoriaId || p.categorias.includes(Number(categoriaId));
-            const okBairro = !bairro || p.endereco.bairro.toLowerCase().includes(bairro.toLowerCase());
-            return okCidade && okCategoria && okBairro;
-        }).map((p) => {
-            p.calcularReputacao(db.avaliacoes.filter((a) => a.idProfissional === p.id));
-            return p;
+        return await res.json();
+    }
+
+    async configurarPerfil(idProfissional, { categoriaIds, endereco }) {
+        const res = await fetch(`${API_BASE_URL}/profissionais/${idProfissional}/perfil`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                categoriasIds: categoriaIds,
+                logradouro: endereco.logradouro || "",
+                bairro: endereco.bairro || "",
+                cidade: endereco.cidade || "",
+                estado: endereco.estado || ""
+            })
         });
-    }
 
-    buscarPorId(id) {
-        /* fetch(`${API_BASE_URL}/profissionais/${id}`) */
-        const p = db.profissionais.find((pr) => pr.id === id);
-        if (!p) throw new ProfissionalNaoEncontradoException();
-        p.calcularReputacao(db.avaliacoes.filter((a) => a.idProfissional === id));
-        return p;
-    }
+        if (!res.ok) {
+            let mensagem = "Erro ao salvar perfil.";
+            try {
+                const erro = await res.json();
+                mensagem = erro.mensagem || mensagem;
+            } catch (e) { }
+            throw new GojobException(mensagem);
+        }
 
-    configurarPerfil(idProfissional, { categoriaIds, endereco }) {
-        const profissional = this.buscarPorId(idProfissional);
-        if (categoriaIds.length > 3) throw new LimiteCategoriasException(); // RN05
-        profissional.categorias = [];
-        categoriaIds.forEach((cid) => {
-            const categoria = db.categorias.find((c) => c.id === cid);
-            profissional.adicionarCategoria(categoria);
-        });
-        profissional.configurarEndereco(new Endereco(endereco));
-        /* fetch(`${API_BASE_URL}/profissionais/${idProfissional}/perfil`, { method: "PUT", body: JSON.stringify({ categoriaIds, endereco }) }) */
-        return profissional;
-    }
+        // SE O C# RETORNAR 200/204 SEM CORPO, NÃO FAZ res.json() DIRECTAMENTE:
+        if (res.status === 204 || res.headers.get("content-length") === "0") {
+            return { sucesso: true };
+        }
 
-    inativarConta(idProfissional, solicitante) {
-        if (solicitante?.tipo !== "ADMIN") throw new OperacaoNaoPermitidaException();
-        const profissional = this.buscarPorId(idProfissional);
-        profissional.ativo = false;
-        db.avaliacoes.filter((a) => a.idProfissional === idProfissional).forEach((a) => a.anonimizar()); // RN10
-        /* fetch(`${API_BASE_URL}/profissionais/${idProfissional}/inativar`, { method: "PATCH" }) */
+        return await res.json();
     }
 }
 
@@ -580,10 +572,25 @@ function gojobApp() {
 
         async cadastrar() {
             try {
-                const usuario = await usuarioService.cadastrarUsuario(this.cadastroForm);
-                this.salvarSessao(usuario, "demo-jwt-token");
+                // 1. Faz o cadastro na API (retorna { mensagem, usuarioId })
+                const resposta = await usuarioService.cadastrarUsuario(this.cadastroForm);
+
+                // 2. Monta o objeto com os dados da sessão
+                const usuarioSessao = {
+                    id: resposta.usuarioId,
+                    nome: this.cadastroForm.nome,
+                    email: this.cadastroForm.email,
+                    tipo: this.cadastroForm.tipo
+                };
+
+                // 3. Salva a sessão com o objeto estruturado
+                this.salvarSessao(usuarioSessao, "demo-jwt-token");
                 this.atualizarSessaoUI();
-                if (usuario.tipo === "PROFISSIONAL") this.profissionais = db.profissionais;
+
+                if (this.cadastroForm.tipo === "PROFISSIONAL") {
+                    this.profissionais = db.profissionais;
+                }
+
                 this.closeAuth();
                 const tipoCadastrado = this.cadastroForm.tipo;
                 this.cadastroForm = { nome: "", email: "", telefone: "", senha: "", cidade: "", estado: "", tipo: "CLIENTE" };
@@ -599,17 +606,23 @@ function gojobApp() {
                 } else {
                     toastSucesso("Conta criada com sucesso! Bem-vindo(a) ao GOJOB.");
                 }
-            } catch (e) { toastErro(e.message); }
+            } catch (e) {
+                toastErro(e.message);
+            }
         },
 
         /* ---------------- gerenciamento de sessão (localStorage) ---------------- */
         salvarSessao(usuario, token) {
-            const dadosUsuario = { id: usuario.getId(), nome: usuario.getNome(), role: usuario.tipo };
+            const dadosUsuario = {
+                id: usuario.id || usuario.usuarioId,
+                nome: usuario.nome,
+                role: usuario.tipo || usuario.tipoUsuario
+            };
             localStorage.setItem(STORAGE_TOKEN_KEY, token);
             localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(dadosUsuario));
         },
 
-        atualizarSessaoUI() {
+        async atualizarSessaoUI() {
             const token = localStorage.getItem(STORAGE_TOKEN_KEY);
             const dadosUsuario = localStorage.getItem(STORAGE_USER_KEY);
 
@@ -623,12 +636,16 @@ function gojobApp() {
 
             if (role === "PROFISSIONAL") {
                 try {
-                    const profissional = profissionalService.buscarPorId(id);
-                    this.dash.categorias = [...profissional.categorias];
-                    this.dash.endereco = { ...profissional.endereco };
+                    const profissional = await profissionalService.buscarPorId(id);
+                    this.dash.categorias = profissional.categoriasIds || [];
+                    this.dash.endereco = {
+                        logradouro: "",
+                        bairro: profissional.bairro || "",
+                        cidade: profissional.cidade || "",
+                        estado: profissional.estado || ""
+                    };
                 } catch {
-                    // Conta não encontrada na base local (ex.: após recarregar a página em modo prévia);
-                    // o cabeçalho continua refletindo a sessão salva e o painel parte de campos em branco.
+                    // Em novo cadastro, parte de campos em branco sem travar ou emitir erro
                     this.dash.categorias = [];
                     this.dash.endereco = { logradouro: "", bairro: "", cidade: "", estado: "" };
                 }
@@ -664,11 +681,16 @@ function gojobApp() {
             }
             this.dash.categorias.push(id);
         },
-        salvarPerfilProfissional() {
+        async salvarPerfilProfissional() {
             try {
-                profissionalService.configurarPerfil(this.session.id, { categoriaIds: this.dash.categorias, endereco: this.dash.endereco });
-                toastSucesso("Perfil profissional atualizado.");
-            } catch (e) { toastErro(e.message); }
+                await profissionalService.configurarPerfil(this.session.id, {
+                    categoriaIds: this.dash.categorias,
+                    endereco: this.dash.endereco
+                });
+                toastSucesso("Perfil profissional atualizado com sucesso!");
+            } catch (e) {
+                toastErro(e.message);
+            }
         },
         minhasAvaliacoes() { return this.session.id ? avaliacaoService.listarPorProfissional(this.session.id) : []; },
         minhaReputacao() {

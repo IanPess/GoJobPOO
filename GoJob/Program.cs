@@ -3,9 +3,9 @@ using GoJob.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Conexão com o Banco de Dados via Entity Framework Core (SQLite)
+// 1. Conexão com o Banco de Dados no Supabase via PostgreSQL
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // 2. Registra o suporte a Controllers
 builder.Services.AddControllers();
@@ -30,3 +30,4 @@ app.UseAuthorization();
 // 4. Mapeia os Controllers para responderem aos endpoints
 app.MapControllers();
 
+app.Run();

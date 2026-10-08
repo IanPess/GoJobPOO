@@ -6,99 +6,100 @@ using GoJob.DTOs;
 
 namespace GoJob.Controllers;
 
-[ApiController] // Define que esta classe é um Controller de API e ativa validações automáticas
-[Route("api/[controller]")] // Define a rota base como "api/auth"
+[ApiController]
+[Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
-    private readonly AppDbContext _context; // Variável para armazenar a conexão com a base de dados
+    private readonly AppDbContext _context;
 
-    // Construtor: Recebe o AppDbContext via Injeção de Dependência configurada no Program.cs
     public AuthController(AppDbContext context)
     {
-        _context = context; // Guarda a instância da conexão para usar nos métodos
+        _context = context;
     }
 
-    // Endpoint POST para cadastro: responde em "POST api/auth/cadastrar"
     [HttpPost("cadastrar")]
-    public async Task<IActionResult> Cadastrar([FromBody] UsuarioCadastroDto dto) // Recebe o JSON do front-end e converte no DTO
+    public async Task<IActionResult> Cadastrar([FromBody] UsuarioCadastroDto dto)
     {
-        // 1. Consulta o banco para ver se já existe algum utilizador com o e-mail informado
-        if (await _context.Usuarios.AnyAsync(u => u.Email == dto.Email))
+        // 1. Normaliza o e-mail (remove espaços extras e converte para minúsculas)
+        var emailClean = dto.Email?.Trim().ToLower();
+
+        if (string.IsNullOrEmpty(emailClean))
         {
-            // Se encontrar, retorna um erro HTTP 400 (Bad Request) com uma mensagem em JSON
+            return BadRequest(new { mensagem = "E-mail inválido!" });
+        }
+
+        // 2. Verifica no banco se já existe o e-mail (ignorando maiúsculas/minúsculas)
+        var emailExiste = await _context.Usuarios
+            .AnyAsync(u => u.Email.ToLower() == emailClean);
+
+        if (emailExiste)
+        {
             return BadRequest(new { mensagem = "E-mail já cadastrado!" });
         }
 
-        Usuario novoUsuario; // Declara a variável genérica da entidade pai (Usuario)
+        // Utiliza o e-mail limpo no DTO
+        dto.Email = emailClean;
 
-        // 2. Verifica se o tipo enviado no DTO é "Profissional" (ignorando maiúsculas/minúsculas)
+        Usuario novoUsuario;
+
         if (dto.TipoUsuario.Equals("Profissional", StringComparison.OrdinalIgnoreCase))
         {
-            // Cria a instância específica da classe Profissional ajustada ao modelo do Domain
             var prof = new Profissional
             {
                 Nome = dto.Nome,
                 Email = dto.Email,
-                Senha = dto.Senha, // Atribui a senha recebida
+                SenhaHash = dto.Senha,
                 Telefone = dto.Telefone,
-                DescricaoServico = dto.Descricao ?? string.Empty // Atribui a descrição ao campo DescricaoServico da entidade
+                DescricaoServico = dto.Descricao ?? string.Empty
             };
 
-            // Se o front-end enviou o ID de uma Categoria no cadastro
             if (dto.CategoriaId.HasValue)
             {
-                // Procura a categoria correspondente na tabela de Categorias
                 var cat = await _context.Categorias.FindAsync(dto.CategoriaId.Value);
                 if (cat != null)
                 {
-                    // Adiciona a categoria encontrada à coleção N:N do profissional
                     prof.Categorias.Add(cat);
                 }
             }
 
-            novoUsuario = prof; // Atribui a instância do profissional à variável pai
+            novoUsuario = prof;
         }
         else
         {
-            // Se não for profissional, cria uma instância específica da classe herdeira Cliente
             novoUsuario = new Cliente
             {
                 Nome = dto.Nome,
                 Email = dto.Email,
-                Senha = dto.Senha,
+                SenhaHash = dto.Senha,
                 Telefone = dto.Telefone
             };
         }
 
-        _context.Usuarios.Add(novoUsuario); // Prepara o objeto para ser inserido na tabela 'Usuarios'
-        await _context.SaveChangesAsync(); // Executa o comando INSERT no banco de dados SQLite de forma assíncrona
+        _context.Usuarios.Add(novoUsuario);
+        await _context.SaveChangesAsync();
 
-        // Retorna HTTP 200 (OK) com a mensagem e o ID que o banco acabou de gerar automaticamente
         return Ok(new { mensagem = "Usuário cadastrado com sucesso!", usuarioId = novoUsuario.Id });
     }
 
-    // Endpoint POST para login: responde em "POST api/auth/login"
     [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginDto dto) // Recebe email e senha do front-end
+    public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
-        // Procura no banco o primeiro utilizador que tenha exatamente o mesmo e-mail E a mesma senha
-        var usuario = await _context.Usuarios
-            .FirstOrDefaultAsync(u => u.Email == dto.Email && u.Senha == dto.Senha);
+        var emailClean = dto.Email?.Trim().ToLower();
 
-        // Se não encontrar nenhum registo correspondente
+        var usuario = await _context.Usuarios
+            .FirstOrDefaultAsync(u => u.Email.ToLower() == emailClean && u.SenhaHash == dto.Senha);
+
         if (usuario == null)
         {
-            // Retorna HTTP 401 (Unauthorized - Não Autorizado)
             return Unauthorized(new { mensagem = "E-mail ou senha inválidos!" });
         }
 
-        // Se encontrou, retorna HTTP 200 (OK) enviando os dados essenciais para o front-end salvar no navegador
         return Ok(new
         {
             id = usuario.Id,
             nome = usuario.Nome,
             email = usuario.Email,
-            tipo = usuario.GetType().Name // Descobre o nome da classe concreta ("Cliente" ou "Profissional")
+            tipo = usuario.GetType().Name
         });
     }
 }
