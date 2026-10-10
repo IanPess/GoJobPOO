@@ -361,6 +361,24 @@ class ProfissionalService {
 
         return await res.json();
     }
+    async buscarProfissionais(cidade, categoriaId, bairro) {
+        // O back-end(ProfissionaisController) espera 'busca' e 'categoriaId'.
+        // juntar a cidade e o bairro para criar o termo de busca.
+        let termoBusca = cidade || "";
+        if (bairro) termoBusca += " " + bairro;
+
+        let url = `${API_BASE_URL}/profissionais?busca=${encodeURIComponent(termoBusca)}`;
+
+        if (categoriaId) {
+            url += `&categoriaId=${categoriaId}`;
+        }
+
+        const res = await fetch(url);
+        if (!res.ok) {
+            throw new GojobException("Erro ao buscar profissionais.");
+        }
+        return await res.json();
+    }
 }
 
 class AvaliacaoService {
@@ -504,9 +522,10 @@ function gojobApp() {
         nomeCategoria(id) { return this.categorias.find((c) => c.id === id)?.nome || ""; },
 
         /* ---------------- busca (RF07) ---------------- */
-        buscarProfissionais() {
+        async buscarProfissionais() {
             try {
-                this.resultados = profissionalService.buscarProfissionais(this.search.cidade, this.search.categoriaId || null, this.search.bairro || null);
+                // O await garante que os dados chegam antes de mudar o ecrã
+                this.resultados = await profissionalService.buscarProfissionais(this.search.cidade, this.search.categoriaId || null, this.search.bairro || null);
                 this.view = "resultados";
                 window.scrollTo({ top: 0, behavior: "smooth" });
             } catch (e) {

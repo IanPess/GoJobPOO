@@ -30,7 +30,9 @@ public class ProfissionaisController : ControllerBase
         if (!string.IsNullOrEmpty(busca))
         {
             var termo = busca.Trim().ToLower();
-            query = query.Where(p => p.Nome.ToLower().Contains(termo) || p.DescricaoServico.ToLower().Contains(termo));
+            query = query.Where(p => p.Nome.ToLower().Contains(termo) ||
+                                     (p.DescricaoServico != null && p.DescricaoServico.ToLower().Contains(termo)) ||
+                                     (p.Endereco != null && p.Endereco.Cidade.ToLower().Contains(termo)));// adciona a busca por cidade
         }
 
         if (categoriaId.HasValue)
@@ -91,5 +93,50 @@ public class ProfissionaisController : ControllerBase
         };
 
         return Ok(dto);
+    }
+    // Atualizar por id
+    [HttpPut("{id}/perfil")]
+    public async Task<IActionResult> AtualizarPerfil(int id, [FromBody] AtualizarPerfilDto dto)
+    {
+        // 1. Procura o profissional na base de dados, incluindo as tabelas relacionadas
+        var profissional = await _context.Usuarios
+            .OfType<Profissional>()
+            .Include(p => p.Categorias)
+            .Include(p => p.Endereco)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (profissional == null)
+        {
+            return NotFound(new { mensagem = "Profissional não encontrado." });
+        }
+
+        // 2. Atualiza ou cria o endereço
+        if (profissional.Endereco == null)
+        {
+            profissional.Endereco = new Endereco { UsuarioId = id };
+        }
+        profissional.Endereco.Logradouro = dto.Logradouro;
+        profissional.Endereco.Bairro = dto.Bairro;
+        profissional.Endereco.Cidade = dto.Cidade;
+        profissional.Endereco.Estado = dto.Estado;
+
+        // 3. Atualiza as categorias (limpa as antigas e adiciona as novas)
+        profissional.Categorias.Clear();
+        if (dto.CategoriasIds != null && dto.CategoriasIds.Any())
+        {
+            var novasCategorias = await _context.Categorias
+                .Where(c => dto.CategoriasIds.Contains(c.Id))
+                .ToListAsync();
+
+            foreach (var cat in novasCategorias)
+            {
+                profissional.Categorias.Add(cat);
+            }
+        }
+
+        // 4. Guarda as alterações no banco de dados
+        await _context.SaveChangesAsync();
+
+        return NoContent(); // Retorna sucesso (204) sem conteúdo
     }
 }
