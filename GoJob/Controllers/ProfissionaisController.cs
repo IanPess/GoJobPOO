@@ -30,7 +30,9 @@ public class ProfissionaisController : ControllerBase
         if (!string.IsNullOrEmpty(busca))
         {
             var termo = busca.Trim().ToLower();
-            query = query.Where(p => p.Nome.ToLower().Contains(termo) || p.DescricaoServico.ToLower().Contains(termo));
+            query = query.Where(p => p.Nome.ToLower().Contains(termo) ||
+                                     (p.DescricaoServico != null && p.DescricaoServico.ToLower().Contains(termo)) ||
+                                     (p.Endereco != null && p.Endereco.Cidade.ToLower().Contains(termo)));// adciona a busca por cidade
         }
 
         if (categoriaId.HasValue)
@@ -90,48 +92,5 @@ public class ProfissionaisController : ControllerBase
         };
 
         return Ok(dto);
-    }
-
-    // Mapeamento explícito da rota recebida pelo front-end
-    [HttpPut("{id}/perfil")]
-    public async Task<IActionResult> AtualizarPerfil(int id, [FromBody] ProfissionalPerfilAtualizarDto dto)
-    {
-        var profissional = await _context.Usuarios
-            .OfType<Profissional>()
-            .Include(p => p.Categorias)
-            .Include(p => p.Endereco)
-            .FirstOrDefaultAsync(p => p.Id == id);
-
-        if (profissional == null)
-        {
-            return NotFound(new { mensagem = "Profissional não encontrado." });
-        }
-
-        if (profissional.Endereco == null)
-        {
-            profissional.Endereco = new Endereco();
-        }
-
-        profissional.Endereco.Logradouro = dto.Logradouro ?? string.Empty;
-        profissional.Endereco.Bairro = dto.Bairro ?? string.Empty;
-        profissional.Endereco.Cidade = dto.Cidade ?? string.Empty;
-        profissional.Endereco.Estado = dto.Estado ?? string.Empty;
-
-        profissional.Categorias.Clear();
-        if (dto.CategoriasIds != null && dto.CategoriasIds.Any())
-        {
-            var categorias = await _context.Categorias
-                .Where(c => dto.CategoriasIds.Contains(c.Id))
-                .ToListAsync();
-
-            foreach (var cat in categorias)
-            {
-                profissional.Categorias.Add(cat);
-            }
-        }
-
-        await _context.SaveChangesAsync();
-
-        return Ok(new { mensagem = "Perfil atualizado com sucesso!" });
     }
 }
