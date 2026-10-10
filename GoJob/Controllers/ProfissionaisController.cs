@@ -61,7 +61,6 @@ public class ProfissionaisController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> ObterPorId(int id)
     {
-        // Consulta o utilizador base no banco e verifica a conversão para Profissional
         var usuario = await _context.Usuarios
             .Include(u => (u as Profissional)!.Categorias)
             .Include(u => (u as Profissional)!.AvaliacoesRecebidas)
@@ -91,5 +90,48 @@ public class ProfissionaisController : ControllerBase
         };
 
         return Ok(dto);
+    }
+
+    // Mapeamento explícito da rota recebida pelo front-end
+    [HttpPut("{id}/perfil")]
+    public async Task<IActionResult> AtualizarPerfil(int id, [FromBody] ProfissionalPerfilAtualizarDto dto)
+    {
+        var profissional = await _context.Usuarios
+            .OfType<Profissional>()
+            .Include(p => p.Categorias)
+            .Include(p => p.Endereco)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (profissional == null)
+        {
+            return NotFound(new { mensagem = "Profissional não encontrado." });
+        }
+
+        if (profissional.Endereco == null)
+        {
+            profissional.Endereco = new Endereco();
+        }
+
+        profissional.Endereco.Logradouro = dto.Logradouro ?? string.Empty;
+        profissional.Endereco.Bairro = dto.Bairro ?? string.Empty;
+        profissional.Endereco.Cidade = dto.Cidade ?? string.Empty;
+        profissional.Endereco.Estado = dto.Estado ?? string.Empty;
+
+        profissional.Categorias.Clear();
+        if (dto.CategoriasIds != null && dto.CategoriasIds.Any())
+        {
+            var categorias = await _context.Categorias
+                .Where(c => dto.CategoriasIds.Contains(c.Id))
+                .ToListAsync();
+
+            foreach (var cat in categorias)
+            {
+                profissional.Categorias.Add(cat);
+            }
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new { mensagem = "Perfil atualizado com sucesso!" });
     }
 }
