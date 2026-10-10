@@ -335,9 +335,11 @@ class ProfissionalService {
     async configurarPerfil(idProfissional, { categoriaIds, endereco }) {
         const res = await fetch(`${API_BASE_URL}/profissionais/${idProfissional}/perfil`, {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json"
+            },
             body: JSON.stringify({
-                categoriasIds: categoriaIds,
+                categoriasIds: categoriaIds || [],
                 logradouro: endereco.logradouro || "",
                 bairro: endereco.bairro || "",
                 cidade: endereco.cidade || "",
@@ -354,7 +356,7 @@ class ProfissionalService {
             throw new GojobException(mensagem);
         }
 
-        // SE O C# RETORNAR 200/204 SEM CORPO, NÃO FAZ res.json() DIRECTAMENTE:
+        // Se o backend responder 200 OK ou 204 No Content sem corpo
         if (res.status === 204 || res.headers.get("content-length") === "0") {
             return { sucesso: true };
         }
@@ -389,19 +391,62 @@ class AvaliacaoService {
         return db.avaliacoes.filter((a) => a.idProfissional === idProfissional).sort((a, b) => new Date(b.dataHora) - new Date(a.dataHora));
     }
 
-    registrarAvaliacao({ idCliente, idProfissional, nota, comentario }) {
-        if (idCliente === idProfissional) throw new AutoAvaliacaoException(); // RN09
-        if (!nota || nota < 1 || nota > 5 || !comentario) throw new AvaliacaoInvalidaException(); // RN06
-        this.profissionalService.buscarPorId(idProfissional); // valida existência (RN03)
+    async registrarAvaliacao() {
+        // Tenta obter o ID da sessão ativa ou diretamente do localStorage como fallback
+        let idCliente = this.session?.id || this.session?.usuarioId;
 
-        const avaliacao = new Avaliacao({
-            id: db.proximoId.avaliacao++,
-            idCliente, idProfissional, nota, comentario,
-            dataHora: new Date().toISOString(),
-        });
-        db.avaliacoes.push(avaliacao);
-        /* fetch(`${API_BASE_URL}/avaliacoes`, { method: "POST", body: JSON.stringify({ idProfissional, nota, comentario }) }) */
-        return avaliacao;
+        if (!idCliente) {
+            const dadosUserJson = localStorage.getItem(STORAGE_USER_KEY);
+            if (dadosUserJson) {
+                try {
+                    const userObj = JSON.parse(dadosUserJson);
+                    idCliente = userObj.id || userObj.usuarioId || userObj.Id;
+                } catch (e) { }
+            }
+        }
+
+        const cId = Number(idCliente);
+        const pId = Number(this.perfilAtual?.id);
+        const notaNum = Number(this.novaAvaliacao?.nota);
+
+        if (!cId || isNaN(cId)) {
+            toastErro("Sessão inválida. Faça login novamente para avaliar.");
+            return;
+        }
+
+        if (!pId || isNaN(pId)) {
+            toastErro("Profissional inválido.");
+            return;
+        }
+
+        if (cId === pId) {
+            toastErro("Não é possível avaliar a si mesmo.");
+            return;
+        }
+
+        if (!notaNum || notaNum < 1 || notaNum > 5) {
+            toastErro("Selecione pelo menos 1 estrela para avaliar.");
+            return;
+        }
+
+        try {
+            await avaliacaoService.registrarAvaliacao({
+                clienteId: cId,
+                profissionalId: pId,
+                nota: notaNum,
+                comentario: this.novaAvaliacao.comentario || ""
+            });
+
+            toastSucesso("Avaliação enviada com sucesso!");
+
+            // Reseta o formulário de avaliação
+            this.novaAvaliacao = { nota: 0, comentario: "" };
+
+            // Recarrega o perfil para exibir a nova avaliação na lista
+            await this.abrirPerfil(pId);
+        } catch (e) {
+            toastErro(e.message || "Erro ao registrar a avaliação.");
+        }
     }
 
     excluirAvaliacao(idAvaliacao, idCliente) {
@@ -539,39 +584,63 @@ function gojobApp() {
         iniciais(nome) { return nome.split(" ").filter(Boolean).slice(0, 2).map((n) => n[0]).join("").toUpperCase(); },
 
         /* ---------------- perfil público (RF10, RF08, RF09) ---------------- */
-        abrirPerfil(id) {
+        async abrirPerfil(id) {
             try {
-                this.perfilAtual = profissionalService.buscarPorId(id);
+                const p = await profissionalService.buscarPorId(id);
+
+                this.perfilAtual = {
+                    id: p.id ?? p.Id,
+                    nome: p.nome ?? p.Nome ?? "Profissional",
+                    profissao: p.profissao ?? p.Profissao ?? p.nomeCategoria ?? "Prestador de Serviços",
+                    descricao: p.descricao ?? p.Descricao ?? "Sem descrição informada.",
+                    cidade: p.cidade ?? p.Cidade ?? "",
+                    bairro: p.bairro ?? p.Bairro ?? "",
+                    estado: p.estado ?? p.Estado ?? "",
+                    avaliacaoMedia: p.avaliacaoMedia ?? p.AvaliacaoMedia ?? 0,
+                    totalAvaliacoes: p.totalAvaliacoes ?? p.TotalAvaliacoes ?? 0,
+                    avaliacoes: p.avaliacoes ?? p.Avaliacoes ?? []
+                };
+
                 this.novaAvaliacao = { nota: 0, comentario: "" };
                 this.perfilAberto = true;
-            } catch (e) { toastErro(e.message); }
+            } catch (e) {
+                toastErro(e.message || "Erro ao carregar o perfil.");
+            }
         },
         fecharPerfil() { this.perfilAberto = false; },
         avaliacoesDoAtual() { return this.perfilAtual ? avaliacaoService.listarPorProfissional(this.perfilAtual.id) : []; },
         nomeCliente(id) { return db.clientes.find((c) => c.getId() === id)?.getNome() || "Cliente"; },
         formatarData(iso) { return new Date(iso).toLocaleDateString("pt-BR"); },
 
-        registrarAvaliacao() {
+        async registrarAvaliacao() {
+            if (!this.session.logado) {
+                toastErro("Precisas de estar ligado para enviar uma avaliação.");
+                return;
+            }
+
+            if (!this.novaAvaliacao.nota || this.novaAvaliacao.nota === 0) {
+                toastErro("Seleciona pelo menos 1 estrela.");
+                return;
+            }
+
             try {
-                avaliacaoService.registrarAvaliacao({
-                    idCliente: this.session.id,
-                    idProfissional: this.perfilAtual.id,
+                await avaliacaoService.registrarAvaliacao({
+                    clienteId: this.session.id,
+                    profissionalId: this.perfilAtual.id,
                     nota: this.novaAvaliacao.nota,
-                    comentario: this.novaAvaliacao.comentario.trim(),
+                    comentario: this.novaAvaliacao.comentario || ""
                 });
-                this.perfilAtual = profissionalService.buscarPorId(this.perfilAtual.id); // recalcula reputação (RF11)
+
+                toastSucesso("Avaliação enviada com sucesso!");
+
+                // Limpa o formulário de avaliação
                 this.novaAvaliacao = { nota: 0, comentario: "" };
-                toastSucesso("Avaliação registrada com sucesso.");
-            } catch (e) { toastErro(e.message); }
-        },
-        async excluirAvaliacao(idAvaliacao) {
-            const ok = await confirmarAcao("Excluir avaliação?", "Esta ação não pode ser desfeita.");
-            if (!ok) return;
-            try {
-                avaliacaoService.excluirAvaliacao(idAvaliacao, this.session.id);
-                this.perfilAtual = profissionalService.buscarPorId(this.perfilAtual.id);
-                toastSucesso("Avaliação excluída.");
-            } catch (e) { toastErro(e.message); }
+
+                // Recarrega o perfil e as avaliações atualizadas da API
+                await this.abrirPerfil(this.perfilAtual.id);
+            } catch (e) {
+                toastErro(e.message || "Erro ao guardar a avaliação.");
+            }
         },
 
         /* ---------------- autenticação (RF01, RF02) ---------------- */
@@ -580,13 +649,22 @@ function gojobApp() {
 
         async autenticar() {
             try {
-                const { token, usuario } = await usuarioService.autenticar(this.loginForm.email, this.loginForm.senha);
+                const resposta = await usuarioService.autenticar(this.loginForm.email, this.loginForm.senha);
+
+                // Trata a resposta se vier { token, usuario } ou o objeto direto
+                const usuario = resposta.usuario || resposta;
+                const token = resposta.token || "demo-jwt-token";
+
                 this.salvarSessao(usuario, token);
                 this.atualizarSessaoUI();
                 this.closeAuth();
                 this.loginForm = { email: "", senha: "" };
-                toastSucesso(`Bem-vindo(a), ${this.primeiroNome(usuario.getNome())}!`);
-            } catch (e) { toastErro(e.message); }
+
+                // Usa this.session.nome para obter o primeiro nome sem chamar métodos inexistentes
+                toastSucesso(`Bem-vindo(a), ${this.primeiroNome(this.session.nome)}!`);
+            } catch (e) {
+                toastErro(e.message);
+            }
         },
 
         async cadastrar() {
@@ -632,12 +710,18 @@ function gojobApp() {
 
         /* ---------------- gerenciamento de sessão (localStorage) ---------------- */
         salvarSessao(usuario, token) {
+            if (!usuario) return;
+
+            // Normaliza o tipo de utilizador (PROFISSIONAL, CLIENTE, ADMIN)
+            const roleUsuario = usuario.tipo || usuario.tipoUsuario || usuario.TipoUsuario || "CLIENTE";
+
             const dadosUsuario = {
-                id: usuario.id || usuario.usuarioId,
-                nome: usuario.nome,
-                role: usuario.tipo || usuario.tipoUsuario
+                id: usuario.id ?? usuario.usuarioId ?? usuario.Id,
+                nome: usuario.nome ?? usuario.Nome ?? "",
+                role: String(roleUsuario).toUpperCase()
             };
-            localStorage.setItem(STORAGE_TOKEN_KEY, token);
+
+            localStorage.setItem(STORAGE_TOKEN_KEY, token || "demo-jwt-token");
             localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(dadosUsuario));
         },
 
@@ -650,24 +734,34 @@ function gojobApp() {
                 return;
             }
 
-            const { id, nome, role } = JSON.parse(dadosUsuario);
-            this.session = { logado: true, id, role, nome };
+            try {
+                const { id, nome, role } = JSON.parse(dadosUsuario);
+                const roleUpper = String(role || "").trim().toUpperCase();
 
-            if (role === "PROFISSIONAL") {
-                try {
-                    const profissional = await profissionalService.buscarPorId(id);
-                    this.dash.categorias = profissional.categoriasIds || [];
-                    this.dash.endereco = {
-                        logradouro: "",
-                        bairro: profissional.bairro || "",
-                        cidade: profissional.cidade || "",
-                        estado: profissional.estado || ""
-                    };
-                } catch {
-                    // Em novo cadastro, parte de campos em branco sem travar ou emitir erro
-                    this.dash.categorias = [];
-                    this.dash.endereco = { logradouro: "", bairro: "", cidade: "", estado: "" };
+                this.session = {
+                    logado: true,
+                    id: id,
+                    role: roleUpper,
+                    nome: nome
+                };
+
+                if (roleUpper === "PROFISSIONAL" || roleUpper === "ADMIN") {
+                    try {
+                        const profissional = await profissionalService.buscarPorId(id);
+                        this.dash.categorias = profissional.categoriasIds || [];
+                        this.dash.endereco = {
+                            logradouro: "",
+                            bairro: profissional.bairro || "",
+                            cidade: profissional.cidade || "",
+                            estado: profissional.estado || ""
+                        };
+                    } catch (err) {
+                        this.dash.categorias = [];
+                        this.dash.endereco = { logradouro: "", bairro: "", cidade: "", estado: "" };
+                    }
                 }
+            } catch (e) {
+                this.session = { logado: false, id: null, role: null, nome: null };
             }
         },
 

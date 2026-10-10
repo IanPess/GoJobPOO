@@ -20,7 +20,6 @@ public class AuthController : ControllerBase
     [HttpPost("cadastrar")]
     public async Task<IActionResult> Cadastrar([FromBody] UsuarioCadastroDto dto)
     {
-        // 1. Normaliza o e-mail (remove espaços extras e converte para minúsculas)
         var emailClean = dto.Email?.Trim().ToLower();
 
         if (string.IsNullOrEmpty(emailClean))
@@ -28,7 +27,6 @@ public class AuthController : ControllerBase
             return BadRequest(new { mensagem = "E-mail inválido!" });
         }
 
-        // 2. Verifica no banco se já existe o e-mail (ignorando maiúsculas/minúsculas)
         var emailExiste = await _context.Usuarios
             .AnyAsync(u => u.Email.ToLower() == emailClean);
 
@@ -37,7 +35,6 @@ public class AuthController : ControllerBase
             return BadRequest(new { mensagem = "E-mail já cadastrado!" });
         }
 
-        // Utiliza o e-mail limpo no DTO
         dto.Email = emailClean;
 
         Usuario novoUsuario;
@@ -94,12 +91,19 @@ public class AuthController : ControllerBase
             return Unauthorized(new { mensagem = "E-mail ou senha inválidos!" });
         }
 
+        var tipoClasse = usuario.GetType().Name;
+
         return Ok(new
         {
-            id = usuario.Id,
-            nome = usuario.Nome,
-            email = usuario.Email,
-            tipo = usuario.GetType().Name
+            token = "demo-jwt-token",
+            usuario = new
+            {
+                id = usuario.Id,
+                nome = usuario.Nome,
+                email = usuario.Email,
+                tipo = tipoClasse.ToUpper(),
+                tipoUsuario = tipoClasse.ToUpper()
+            }
         });
     }
 }
