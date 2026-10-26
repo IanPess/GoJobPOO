@@ -356,16 +356,14 @@ class ProfissionalService {
             throw new GojobException(mensagem);
         }
 
-        // Se o backend responder 200 OK ou 204 No Content sem corpo
         if (res.status === 204 || res.headers.get("content-length") === "0") {
             return { sucesso: true };
         }
 
         return await res.json();
     }
+
     async buscarProfissionais(cidade, categoriaId, bairro) {
-        // O back-end(ProfissionaisController) espera 'busca' e 'categoriaId'.
-        // juntar a cidade e o bairro para criar o termo de busca.
         let termoBusca = cidade || "";
         if (bairro) termoBusca += " " + bairro;
 
@@ -384,76 +382,55 @@ class ProfissionalService {
 }
 
 class AvaliacaoService {
-    constructor(profissionalService) { this.profissionalService = profissionalService; }
-
-    listarPorProfissional(idProfissional) {
-        /* fetch(`${API_BASE_URL}/profissionais/${idProfissional}/avaliacoes`) */
-        return db.avaliacoes.filter((a) => a.idProfissional === idProfissional).sort((a, b) => new Date(b.dataHora) - new Date(a.dataHora));
+    constructor(profissionalService) {
+        this.profissionalService = profissionalService;
     }
 
-    async registrarAvaliacao() {
-        // Tenta obter o ID da sessão ativa ou diretamente do localStorage como fallback
-        let idCliente = this.session?.id || this.session?.usuarioId;
-
-        if (!idCliente) {
-            const dadosUserJson = localStorage.getItem(STORAGE_USER_KEY);
-            if (dadosUserJson) {
-                try {
-                    const userObj = JSON.parse(dadosUserJson);
-                    idCliente = userObj.id || userObj.usuarioId || userObj.Id;
-                } catch (e) { }
-            }
-        }
-
-        const cId = Number(idCliente);
-        const pId = Number(this.perfilAtual?.id);
-        const notaNum = Number(this.novaAvaliacao?.nota);
-
-        if (!cId || isNaN(cId)) {
-            toastErro("Sessão inválida. Faça login novamente para avaliar.");
-            return;
-        }
-
-        if (!pId || isNaN(pId)) {
-            toastErro("Profissional inválido.");
-            return;
-        }
-
-        if (cId === pId) {
-            toastErro("Não é possível avaliar a si mesmo.");
-            return;
-        }
-
-        if (!notaNum || notaNum < 1 || notaNum > 5) {
-            toastErro("Selecione pelo menos 1 estrela para avaliar.");
-            return;
-        }
-
+    async listarPorProfissional(idProfissional) {
+        if (!idProfissional) return [];
         try {
-            await avaliacaoService.registrarAvaliacao({
-                clienteId: cId,
-                profissionalId: pId,
-                nota: notaNum,
-                comentario: this.novaAvaliacao.comentario || ""
-            });
-
-            toastSucesso("Avaliação enviada com sucesso!");
-
-            // Reseta o formulário de avaliação
-            this.novaAvaliacao = { nota: 0, comentario: "" };
-
-            // Recarrega o perfil para exibir a nova avaliação na lista
-            await this.abrirPerfil(pId);
+            const res = await fetch(`${API_BASE_URL}/avaliacoes/profissional/${idProfissional}`);
+            if (!res.ok) return [];
+            return await res.json();
         } catch (e) {
-            toastErro(e.message || "Erro ao registrar a avaliação.");
+            console.error("Erro ao listar avaliações do profissional:", e);
+            return [];
         }
     }
 
-    excluirAvaliacao(idAvaliacao, idCliente) {
-        const avaliacao = db.avaliacoes.find((a) => a.id === idAvaliacao);
-        if (!avaliacao || avaliacao.idCliente !== idCliente) throw new OperacaoNaoPermitidaException(); // RN06
-        db.avaliacoes = db.avaliacoes.filter((a) => a.id !== idAvaliacao);
-        /* fetch(`${API_BASE_URL}/avaliacoes/${idAvaliacao}`, { method: "DELETE" }) */
+    async registrarAvaliacao(dados) {
+        const res = await fetch(`${API_BASE_URL}/avaliacoes`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(dados)
+        });
+
+        if (!res.ok) {
+            let mensagem = "Erro ao registrar avaliação.";
+            try {
+                const erro = await res.json();
+                mensagem = erro.mensagem || mensagem;
+            } catch (e) { }
+            throw new GojobException(mensagem);
+        }
+
+        if (res.status === 204 || res.headers.get("content-length") === "0") {
+            return { sucesso: true };
+        }
+
+        return await res.json();
+    }
+
+    async excluirAvaliacao(idAvaliacao) {
+        const res = await fetch(`${API_BASE_URL}/avaliacoes/${idAvaliacao}`, {
+            method: "DELETE"
+        });
+
+        if (!res.ok) {
+            throw new GojobException("Erro ao excluir avaliação.");
+        }
     }
 }
 
@@ -586,7 +563,10 @@ function gojobApp() {
         /* ---------------- perfil público (RF10, RF08, RF09) ---------------- */
         async abrirPerfil(id) {
             try {
+                // Usa a instância já criada na linha 463
                 const p = await profissionalService.buscarPorId(id);
+
+                const listaAvaliacoes = p.avaliacoes || p.Avaliacoes || p.avaliacoesRecebidas || p.AvaliacoesRecebidas || [];
 
                 this.perfilAtual = {
                     id: p.id ?? p.Id,
@@ -596,50 +576,107 @@ function gojobApp() {
                     cidade: p.cidade ?? p.Cidade ?? "",
                     bairro: p.bairro ?? p.Bairro ?? "",
                     estado: p.estado ?? p.Estado ?? "",
-                    avaliacaoMedia: p.avaliacaoMedia ?? p.AvaliacaoMedia ?? 0,
-                    totalAvaliacoes: p.totalAvaliacoes ?? p.TotalAvaliacoes ?? 0,
-                    avaliacoes: p.avaliacoes ?? p.Avaliacoes ?? []
+                    avaliacaoMedia: p.avaliacaoMedia ?? p.AvaliacaoMedia ?? p.reputacaoMedia ?? p.ReputacaoMedia ?? 0,
+                    totalAvaliacoes: p.totalAvaliacoes ?? p.TotalAvaliacoes ?? listaAvaliacoes.length,
+                    avaliacoes: listaAvaliacoes
                 };
 
                 this.novaAvaliacao = { nota: 0, comentario: "" };
                 this.perfilAberto = true;
             } catch (e) {
-                toastErro(e.message || "Erro ao carregar o perfil.");
+                if (typeof toastErro === "function") {
+                    toastErro(e.message || "Erro ao carregar o perfil.");
+                } else {
+                    alert(e.message || "Erro ao carregar o perfil.");
+                }
             }
         },
-        fecharPerfil() { this.perfilAberto = false; },
-        avaliacoesDoAtual() { return this.perfilAtual ? avaliacaoService.listarPorProfissional(this.perfilAtual.id) : []; },
-        nomeCliente(id) { return db.clientes.find((c) => c.getId() === id)?.getNome() || "Cliente"; },
-        formatarData(iso) { return new Date(iso).toLocaleDateString("pt-BR"); },
+
+        fecharPerfil() {
+            this.perfilAberto = false;
+        },
+
+        avaliacoesDoAtual() {
+            if (!this.perfilAtual || !Array.isArray(this.perfilAtual.avaliacoes)) {
+                return [];
+            }
+            return this.perfilAtual.avaliacoes;
+        },
+
+        nomeCliente(id) {
+            if (typeof db !== "undefined" && db?.clientes) {
+                const cliente = db.clientes.find((c) => (typeof c.getId === "function" ? c.getId() : c.id) === id);
+                if (cliente) {
+                    return typeof cliente.getNome === "function" ? cliente.getNome() : cliente.nome;
+                }
+            }
+            return "Cliente";
+        },
+
+        formatarData(iso) {
+            if (!iso) return "Recente";
+            try {
+                return new Date(iso).toLocaleDateString("pt-BR");
+            } catch {
+                return "Recente";
+            }
+        },
 
         async registrarAvaliacao() {
-            if (!this.session.logado) {
-                toastErro("Precisas de estar ligado para enviar uma avaliação.");
+            // Tenta obter o ID do cliente logado na sessão ou no localStorage
+            let idCliente = this.session?.id || this.session?.usuarioId || this.usuarioLogado?.id;
+
+            if (!idCliente) {
+                const dadosUserJson = localStorage.getItem(STORAGE_USER_KEY);
+                if (dadosUserJson) {
+                    try {
+                        const userObj = JSON.parse(dadosUserJson);
+                        idCliente = userObj.id || userObj.usuarioId || userObj.Id;
+                    } catch (e) { }
+                }
+            }
+
+            const cId = Number(idCliente);
+            const pId = Number(this.perfilAtual?.id);
+            const notaNum = Number(this.novaAvaliacao?.nota);
+
+            if (!cId || isNaN(cId)) {
+                toastErro("Sessão inválida. Faça login novamente para avaliar.");
                 return;
             }
 
-            if (!this.novaAvaliacao.nota || this.novaAvaliacao.nota === 0) {
-                toastErro("Seleciona pelo menos 1 estrela.");
+            if (!pId || isNaN(pId)) {
+                toastErro("Profissional inválido.");
+                return;
+            }
+
+            if (cId === pId) {
+                toastErro("Não é possível avaliar a si mesmo.");
+                return;
+            }
+
+            if (!notaNum || notaNum < 1 || notaNum > 5) {
+                toastErro("Selecione pelo menos 1 estrela para avaliar.");
                 return;
             }
 
             try {
                 await avaliacaoService.registrarAvaliacao({
-                    clienteId: this.session.id,
-                    profissionalId: this.perfilAtual.id,
-                    nota: this.novaAvaliacao.nota,
+                    clienteId: cId,
+                    profissionalId: pId,
+                    nota: notaNum,
                     comentario: this.novaAvaliacao.comentario || ""
                 });
 
                 toastSucesso("Avaliação enviada com sucesso!");
 
-                // Limpa o formulário de avaliação
+                // Reseta o formulário
                 this.novaAvaliacao = { nota: 0, comentario: "" };
 
-                // Recarrega o perfil e as avaliações atualizadas da API
-                await this.abrirPerfil(this.perfilAtual.id);
+                // Recarrega o perfil e busca as novas avaliações direto da API
+                await this.abrirPerfil(pId);
             } catch (e) {
-                toastErro(e.message || "Erro ao guardar a avaliação.");
+                toastErro(e.message || "Erro ao registrar a avaliação.");
             }
         },
 
@@ -794,6 +831,7 @@ function gojobApp() {
             }
             this.dash.categorias.push(id);
         },
+
         async salvarPerfilProfissional() {
             try {
                 await profissionalService.configurarPerfil(this.session.id, {
@@ -805,11 +843,25 @@ function gojobApp() {
                 toastErro(e.message);
             }
         },
-        minhasAvaliacoes() { return this.session.id ? avaliacaoService.listarPorProfissional(this.session.id) : []; },
+
+        minhasAvaliacoes() {
+            // Retorna as avaliações já carregadas na memória do perfil sem disparar promises síncronas
+            if (!this.perfilAtual || !this.perfilAtual.avaliacoes) return [];
+            return Array.isArray(this.perfilAtual.avaliacoes) ? this.perfilAtual.avaliacoes : [];
+        },
+
         minhaReputacao() {
+            // Dá prioridade à reputação média calculada diretamente pelo backend
+            if (this.perfilAtual && (this.perfilAtual.avaliacaoMedia !== undefined || this.perfilAtual.reputacaoMedia !== undefined)) {
+                return Number(this.perfilAtual.avaliacaoMedia ?? this.perfilAtual.reputacaoMedia ?? 0);
+            }
+
+            // Cálculo manual de apoio garantindo que avs é um Array
             const avs = this.minhasAvaliacoes();
-            if (avs.length === 0) return 0;
-            return avs.reduce((acc, a) => acc + a.nota, 0) / avs.length;
+            if (!Array.isArray(avs) || avs.length === 0) return 0;
+
+            const soma = avs.reduce((acc, a) => acc + Number(a.nota || a.Nota || 0), 0);
+            return soma / avs.length;
         },
 
         /* ---------------- painel administrador (RF03–RF05, RF12) ---------------- */

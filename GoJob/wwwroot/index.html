@@ -415,80 +415,77 @@
                 <div>
                     <div class="sticky top-0 bg-ink-900/95 backdrop-blur border-b border-ink-800 px-6 py-4 flex items-center justify-between">
                         <span class="text-xs text-bone-200/50 font-medium">Perfil público</span>
-                        <button @click="fecharPerfil()" class="w-8 h-8 grid place-items-center rounded-lg hover:bg-ink-800 text-bone-200/70"><i data-lucide="x" class="w-4 h-4"></i></button>
+                        <button type="button" @click="fecharPerfil()" class="w-8 h-8 grid place-items-center rounded-lg hover:bg-ink-800 text-bone-200/70">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
                     </div>
 
                     <div class="px-6 pt-6">
-                        <div class="w-16 h-16 rounded-2xl bg-ink-800 border border-ink-700 grid place-items-center font-display font-700 text-xl text-moss-300" x-text="iniciais(perfilAtual.nome)"></div>
+                        <div class="w-16 h-16 rounded-2xl bg-ink-800 border border-ink-700 grid place-items-center font-display font-700 text-xl text-moss-300" x-text="perfilAtual.nome ? perfilAtual.nome.substring(0,2).toUpperCase() : 'P'"></div>
                         <h2 class="font-display font-800 text-xl text-bone-100 mt-4" x-text="perfilAtual.nome"></h2>
-                        <p class="text-sm text-bone-200/55 flex items-center gap-1 mt-1"><i data-lucide="map-pin" class="w-3.5 h-3.5"></i><span x-text="[perfilAtual?.bairro || perfilAtual?.endereco?.bairro, perfilAtual?.cidade || perfilAtual?.endereco?.cidade, perfilAtual?.estado || perfilAtual?.endereco?.estado].filter(Boolean).join(' - ') || 'Localização não informada'"></span></p>
+                        <p class="text-sm text-bone-200/55 flex items-center gap-1 mt-1">
+                            <span x-text="[perfilAtual.bairro, perfilAtual.cidade, perfilAtual.estado].filter(Boolean).join(' - ') || 'Localização não informada'"></span>
+                        </p>
 
                         <div class="flex items-center gap-2 mt-3">
                             <div class="flex gap-0.5">
-                                <template x-for="n in [1, 2, 3, 4, 5]" :key="n">
-                                    <span :class="n <= Math.round(perfilAtual.avaliacaoMedia || perfilAtual.reputacaoMedia || 0) ? 'text-amber-400 fill-amber-400' : 'text-gray-600'">
+                                <template x-for="n in [1, 2, 3, 4, 5]" :key="'star-p-'+n">
+                                    <span :class="n <= Math.round(perfilAtual.avaliacaoMedia || 0) ? 'text-amber-400 fill-amber-400' : 'text-gray-600'">
                                         <svg class="w-4 h-4 inline-block" fill="currentColor" viewBox="0 0 20 20">
                                             <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                                         </svg>
                                     </span>
                                 </template>
                             </div>
-                            <span class="text-sm text-bone-200/70" x-text="perfilAtual.reputacaoMedia > 0 ? perfilAtual.reputacaoMedia.toFixed(1) + ' · ' + avaliacoesDoAtual().length + ' avaliações' : 'Sem avaliações ainda'"></span>
-                        </div>
-
-                        <div class="flex flex-wrap gap-1.5 mt-4">
-                            <template x-for="cid in perfilAtual.categorias" :key="'pcat-'+cid">
-                                <span class="text-[11px] px-2.5 py-1 rounded-full bg-ink-850 border border-ink-700 text-bone-200/70" x-text="nomeCategoria(cid)"></span>
-                            </template>
+                            <span class="text-sm text-bone-200/70" x-text="perfilAtual.avaliacoes && perfilAtual.avaliacoes.length > 0 ? ((perfilAtual.avaliacaoMedia || 0).toFixed(1) + ' · ' + perfilAtual.avaliacoes.length + ' avaliações') : 'Sem avaliações ainda'"></span>
                         </div>
                     </div>
 
-                    <!-- Nova avaliação -->
-                    <div class="mx-6 mt-6 p-5 rounded-2xl bg-ink-850 border border-ink-700">
-                        <template x-if="session.role !== 'CLIENTE'">
-                            <p class="text-xs text-bone-200/50">Entre como cliente para avaliar este profissional.</p>
-                        </template>
-                        <template x-if="session.role === 'CLIENTE' && session.id === perfilAtual.id">
-                            <p class="text-xs text-bone-200/50">Você não pode avaliar a si mesmo.</p>
-                        </template>
-                        <template x-if="session.role === 'CLIENTE' && session.id !== perfilAtual.id">
-                            <div>
-                                <p class="text-sm font-display font-700 text-bone-100 mb-2.5">Deixe sua avaliação</p>
-                                <div class="flex gap-1 mb-3">
-                                    <template x-for="n in 5" :key="'rate-'+n">
-                                        <button type="button" @click="novaAvaliacao.nota = n">
-                                            <i data-lucide="star" class="w-6 h-6 transition-colors" :class="n <= novaAvaliacao.nota ? 'fill-clay-400 text-clay-400' : 'text-ink-700'"></i>
-                                        </button>
-                                    </template>
-                                </div>
-                                <textarea x-model="novaAvaliacao.comentario" rows="3" placeholder="Conte como foi sua experiência"
-                                          class="field resize-none"></textarea>
-                                <button @click="registrarAvaliacao()" class="mt-3 w-full bg-moss-500 hover:bg-moss-400 text-ink-950 font-display font-700 text-sm rounded-xl px-4 py-2.5">Enviar avaliação</button>
+                    <!-- Formulário de Avaliação -->
+                    <div class="px-6 mt-6">
+                        <div class="p-4 rounded-xl bg-ink-900 border border-ink-800">
+                            <h4 class="text-sm font-medium text-bone-100 mb-2">Deixe sua avaliação</h4>
+
+                            <div class="flex items-center gap-1 mb-3">
+                                <template x-for="star in [1, 2, 3, 4, 5]" :key="'new-star-'+star">
+                                    <button type="button" @click="novaAvaliacao.nota = star" class="focus:outline-none transition-transform hover:scale-110">
+                                        <svg class="w-6 h-6" :class="star <= novaAvaliacao.nota ? 'text-amber-400 fill-amber-400' : 'text-gray-600'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.539-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                        </svg>
+                                    </button>
+                                </template>
                             </div>
-                        </template>
+
+                            <textarea x-model="novaAvaliacao.comentario" placeholder="Conte como foi sua experiência" class="w-full h-20 p-3 rounded-lg bg-ink-950 border border-ink-700 text-bone-100 text-sm focus:outline-none focus:border-moss-500 resize-none mb-3"></textarea>
+
+                            <button type="button" @click="registrarAvaliacao()" class="w-full py-2.5 px-4 bg-moss-500 hover:bg-moss-600 text-ink-950 font-semibold rounded-lg transition-colors text-sm">
+                                Enviar avaliação
+                            </button>
+                        </div>
                     </div>
 
-                    <!-- Lista de avaliações -->
+                    <!-- Lista de Avaliações -->
                     <div class="px-6 py-6 space-y-4">
-                        <p class="text-xs font-medium text-bone-200/50 uppercase-none">Avaliações</p>
-                        <template x-if="avaliacoesDoAtual().length === 0">
+                        <p class="text-xs font-medium text-bone-200/50 uppercase">Avaliações</p>
+
+                        <template x-if="!perfilAtual.avaliacoes || perfilAtual.avaliacoes.length === 0">
                             <p class="text-sm text-bone-200/40">Ainda não há avaliações para este profissional.</p>
                         </template>
-                        <template x-for="av in avaliacoesDoAtual()" :key="av.id">
+
+                        <template x-for="av in (perfilAtual.avaliacoes || [])" :key="'av-'+av.id">
                             <div class="border-b border-ink-800 pb-4 last:border-0">
                                 <div class="flex items-center justify-between">
                                     <div class="flex gap-0.5">
-                                        <template x-for="n in 5" :key="'avn-'+n">
-                                            <i data-lucide="star" class="w-3.5 h-3.5" :class="n <= av.nota ? 'fill-clay-400 text-clay-400' : 'text-ink-700'"></i>
+                                        <template x-for="n in [1, 2, 3, 4, 5]" :key="'avstar-'+av.id+'-'+n">
+                                            <svg class="w-3.5 h-3.5 inline-block" :class="n <= av.nota ? 'text-amber-400 fill-amber-400' : 'text-gray-600'" fill="currentColor" viewBox="0 0 20 20">
+                                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                            </svg>
                                         </template>
                                     </div>
-                                    <div class="flex items-center gap-2">
-                                        <span class="text-[11px] text-bone-200/40" x-text="formatarData(av.dataHora)"></span>
-                                        <button x-show="session.role==='CLIENTE' && av.idCliente === session.id" @click="excluirAvaliacao(av.id)" class="text-bone-200/40 hover:text-clay-400"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
-                                    </div>
+                                    <span class="text-[11px] text-bone-200/40" x-text="av.dataCriacao || 'Recente'"></span>
                                 </div>
                                 <p class="text-sm text-bone-200/75 mt-2 leading-relaxed" x-text="av.comentario"></p>
-                                <p class="text-[11px] text-bone-200/40 mt-1" x-text="av.idCliente ? nomeCliente(av.idCliente) : 'Cliente anônimo'"></p>
+                                <p class="text-[11px] text-bone-200/40 mt-1" x-text="av.nomeCliente || 'Cliente'"></p>
                             </div>
                         </template>
                     </div>

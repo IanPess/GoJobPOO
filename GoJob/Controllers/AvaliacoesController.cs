@@ -56,13 +56,16 @@ public class AvaliacoesController : ControllerBase
         }
 
         var cliente = await _context.Usuarios.FindAsync(dto.ClienteId);
-        var profissional = await _context.Usuarios.FindAsync(dto.ProfissionalId);
+        var profissional = await _context.Usuarios
+            .OfType<Profissional>()
+            .FirstOrDefaultAsync(p => p.Id == dto.ProfissionalId);
 
         if (cliente == null || profissional == null)
         {
             return BadRequest(new { mensagem = "Cliente ou profissional não encontrado." });
         }
 
+        // 1. Cria e grava a avaliação no Supabase
         var avaliacao = new Avaliacao
         {
             ClienteId = dto.ClienteId,
@@ -74,7 +77,19 @@ public class AvaliacoesController : ControllerBase
         _context.Avaliacoes.Add(avaliacao);
         await _context.SaveChangesAsync();
 
-        return Ok(new { mensagem = "Avaliação registrada com sucesso!", id = avaliacao.Id });
+        // 2. RN04: Recalcula a Reputação Média com base em todas as avaliações salvas
+        var notas = await _context.Avaliacoes
+            .Where(a => a.ProfissionalId == dto.ProfissionalId)
+            .Select(a => a.Nota)
+            .ToListAsync();
+
+        if (notas.Any())
+        {
+            profissional.ReputacaoMedia = (decimal)notas.Average();
+            await _context.SaveChangesAsync();
+        }
+
+        return Ok(new { mensagem = "Avaliação registrada e reputação atualizada com sucesso!", id = avaliacao.Id });
     }
 }
 

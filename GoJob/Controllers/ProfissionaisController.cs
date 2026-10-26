@@ -101,6 +101,7 @@ public class ProfissionaisController : ControllerBase
             bairro = prof.Endereco?.Bairro ?? string.Empty,
             estado = prof.Endereco?.Estado ?? string.Empty,
             avaliacaoMedia = prof.ReputacaoMedia,
+            reputacaoMedia = prof.ReputacaoMedia,
             totalAvaliacoes = avaliacoesLista.Count,
             avaliacoes = avaliacoesLista
         };
@@ -112,6 +113,11 @@ public class ProfissionaisController : ControllerBase
     [HttpPut("{id}/perfil")]
     public async Task<IActionResult> AtualizarPerfil(int id, [FromBody] ProfissionalPerfilAtualizarDto dto)
     {
+        if (dto.CategoriasIds != null && dto.CategoriasIds.Count > 3)
+        {
+            return BadRequest(new { mensagem = "Um profissional pode ter no máximo 3 categorias associadas." });
+        }
+
         var profissional = await _context.Usuarios
             .OfType<Profissional>()
             .Include(p => p.Categorias)
@@ -160,5 +166,30 @@ public class ProfissionaisController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(new { mensagem = "Perfil atualizado com sucesso!" });
+    }
+
+    [HttpDelete("{id}/inativar")]
+    public async Task<IActionResult> Inativar(int id)
+    {
+        var profissional = await _context.Usuarios
+            .OfType<Profissional>()
+            .Include(p => p.Categorias)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (profissional == null)
+        {
+            return NotFound(new { mensagem = "Profissional não encontrado." });
+        }
+
+        profissional.Nome = "Usuário Inativo";
+        profissional.Email = $"inativo_{profissional.Id}@gojob.local";
+        profissional.Telefone = string.Empty;
+        profissional.DescricaoServico = "Conta desativada.";
+
+        profissional.Categorias.Clear();
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new { mensagem = "Perfil inativado e dados anonimizados com sucesso!" });
     }
 }
