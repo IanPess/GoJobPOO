@@ -24,12 +24,13 @@ public class AppDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // Mapeamento de Herança (TTP - Table Per Hierarchy)
+        // Mapeamento de Herança (TPH - Table Per Hierarchy)
+        // O valor 'ADMIN' é o discriminador padrão da classe Administrador
         modelBuilder.Entity<Usuario>()
             .HasDiscriminator<string>("TipoUsuario")
             .HasValue<Cliente>("Cliente")
             .HasValue<Profissional>("Profissional")
-            .HasValue<Administrador>("Administrador");
+            .HasValue<Administrador>("ADMIN");
 
         // Relacionamento 1 para 1: Usuario <-> Endereco
         modelBuilder.Entity<Usuario>()

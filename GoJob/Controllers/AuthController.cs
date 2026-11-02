@@ -91,7 +91,21 @@ public class AuthController : ControllerBase
             return Unauthorized(new { mensagem = "E-mail ou senha inválidos!" });
         }
 
-        var tipoClasse = usuario.GetType().Name;
+        // Mapeia corretamente o tipo de utilizador (suporta Admin, Profissional e Cliente)
+        string role;
+
+        if (usuario is Administrador || usuario.TipoUsuario?.Equals("admin", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            role = "ADMIN";
+        }
+        else if (usuario is Profissional || usuario.TipoUsuario?.Equals("profissional", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            role = "PROFISSIONAL";
+        }
+        else
+        {
+            role = "CLIENTE";
+        }
 
         return Ok(new
         {
@@ -101,8 +115,9 @@ public class AuthController : ControllerBase
                 id = usuario.Id,
                 nome = usuario.Nome,
                 email = usuario.Email,
-                tipo = tipoClasse.ToUpper(),
-                tipoUsuario = tipoClasse.ToUpper()
+                tipo = role,
+                tipoUsuario = role,
+                role = role
             }
         });
     }

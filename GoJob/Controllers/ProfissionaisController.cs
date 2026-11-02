@@ -41,22 +41,25 @@ public class ProfissionaisController : ControllerBase
             query = query.Where(p => p.Categorias.Any(c => c.Id == categoriaId.Value));
         }
 
-        var lista = await query.Select(p => new ProfissionalPerfilDto
+        var listaBruta = await query.ToListAsync();
+
+        var lista = listaBruta.Select(p => new
         {
-            Id = p.Id,
-            Nome = p.Nome,
-            Email = p.Email,
-            Telefone = p.Telefone ?? string.Empty,
-            Profissao = p.Categorias.FirstOrDefault() != null ? p.Categorias.FirstOrDefault()!.Nome : "Geral",
-            Descricao = p.DescricaoServico ?? string.Empty,
-            NomeCategoria = string.Join(", ", p.Categorias.Select(c => c.Nome)),
-            CategoriasIds = p.Categorias.Select(c => c.Id).ToList(),
-            Cidade = p.Endereco != null ? p.Endereco.Cidade : string.Empty,
-            Bairro = p.Endereco != null ? p.Endereco.Bairro : string.Empty,
-            Estado = p.Endereco != null ? p.Endereco.Estado : string.Empty,
-            AvaliacaoMedia = p.ReputacaoMedia,
-            TotalAvaliacoes = p.AvaliacoesRecebidas != null ? p.AvaliacoesRecebidas.Count : 0
-        }).ToListAsync();
+            id = p.Id,
+            nome = p.Nome,
+            email = p.Email,
+            telefone = p.Telefone ?? string.Empty,
+            profissao = p.Categorias.FirstOrDefault() != null ? p.Categorias.FirstOrDefault()!.Nome : "Geral",
+            descricao = p.DescricaoServico ?? string.Empty,
+            nomeCategoria = string.Join(", ", p.Categorias.Select(c => c.Nome)),
+            categoriasIds = p.Categorias.Select(c => c.Id).ToList(),
+            cidade = p.Endereco != null ? p.Endereco.Cidade : string.Empty,
+            bairro = p.Endereco != null ? p.Endereco.Bairro : string.Empty,
+            estado = p.Endereco != null ? p.Endereco.Estado : string.Empty,
+            avaliacaoMedia = p.ReputacaoMedia,
+            totalAvaliacoes = p.AvaliacoesRecebidas != null ? p.AvaliacoesRecebidas.Count : 0,
+            ativo = !p.Email.StartsWith("inativo_") && p.Nome != "Usuário Inativo"
+        }).ToList();
 
         return Ok(lista);
     }
@@ -103,7 +106,8 @@ public class ProfissionaisController : ControllerBase
             avaliacaoMedia = prof.ReputacaoMedia,
             reputacaoMedia = prof.ReputacaoMedia,
             totalAvaliacoes = avaliacoesLista.Count,
-            avaliacoes = avaliacoesLista
+            avaliacoes = avaliacoesLista,
+            ativo = !prof.Email.StartsWith("inativo_") && prof.Nome != "Usuário Inativo"
         };
 
         return Ok(dto);
@@ -182,7 +186,7 @@ public class ProfissionaisController : ControllerBase
         }
 
         profissional.Nome = "Usuário Inativo";
-        profissional.Email = $"inativo_{profissional.Id}@gojob.local";
+        profissional.Email = $"inativo_{profissional.Id}_{Guid.NewGuid().ToString()[..4]}@gojob.local";
         profissional.Telefone = string.Empty;
         profissional.DescricaoServico = "Conta desativada.";
 

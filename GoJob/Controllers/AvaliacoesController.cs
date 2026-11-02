@@ -85,7 +85,7 @@ public class AvaliacoesController : ControllerBase
 
         if (notas.Any())
         {
-            profissional.ReputacaoMedia = (decimal)notas.Average();
+            profissional.ReputacaoMedia = (float)notas.Average();
             await _context.SaveChangesAsync();
         }
 

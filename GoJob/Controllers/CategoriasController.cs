@@ -1,5 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using GoJob.Data;
 using GoJob.Domain;
@@ -7,6 +7,7 @@ using GoJob.Domain;
 namespace GoJob.Controllers;
 
 [ApiController]
+[AllowAnonymous]
 [Route("api/[controller]")]
 public class CategoriasController : ControllerBase
 {
@@ -20,71 +21,115 @@ public class CategoriasController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> ObterTodas()
     {
-        var categorias = await _context.Categorias.AsNoTracking().ToListAsync();
-        return Ok(categorias);
+        try
+        {
+            var categorias = await _context.Categorias
+                .AsNoTracking()
+                .Select(c => new
+                {
+                    id = c.Id,
+                    nome = c.Nome,
+                    descricao = c.Descricao ?? string.Empty,
+                    ativa = c.Ativa
+                })
+                .ToListAsync();
+
+            return Ok(categorias);
+        }
+        catch (Exception ex)
+        {
+            var msg = ex.InnerException?.Message ?? ex.Message;
+            return StatusCode(500, new { mensagem = $"Erro ao buscar categorias: {msg}" });
+        }
     }
 
     [HttpPost]
-    [Authorize(Roles = "ADMIN")]
     public async Task<IActionResult> Criar([FromBody] CategoriaInputDto dto)
     {
-        if (string.IsNullOrWhiteSpace(dto.Nome))
+        if (dto == null || string.IsNullOrWhiteSpace(dto.Nome))
         {
             return BadRequest(new { mensagem = "O nome da categoria é obrigatório." });
         }
 
-        var existe = await _context.Categorias.AnyAsync(c => c.Nome.ToLower() == dto.Nome.Trim().ToLower());
-        if (existe)
+        try
         {
-            return BadRequest(new { mensagem = "Já existe uma categoria com este nome." });
+            var nomeClean = dto.Nome.Trim();
+            var descClean = dto.Descricao?.Trim() ?? string.Empty;
+
+            var affected = await _context.Database.ExecuteSqlRawAsync(
+                "INSERT INTO \"Categorias\" (\"Nome\", \"Descricao\", \"Ativa\") VALUES ({0}, {1}, true)",
+                nomeClean, descClean);
+
+            if (affected == 0)
+            {
+                await _context.Database.ExecuteSqlRawAsync(
+                    "INSERT INTO categorias (nome, descricao, ativa) VALUES ({0}, {1}, true)",
+                    nomeClean, descClean);
+            }
+
+            return Ok(new { mensagem = "Categoria criada com sucesso!" });
         }
-
-        var categoria = new Categoria { Nome = dto.Nome.Trim() };
-        _context.Categorias.Add(categoria);
-        await _context.SaveChangesAsync();
-
-        return Ok(new { mensagem = "Categoria criada com sucesso!", id = categoria.Id });
+        catch (Exception ex)
+        {
+            var msg = ex.InnerException?.Message ?? ex.Message;
+            return StatusCode(500, new { mensagem = $"Erro ao criar: {msg}" });
+        }
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = "ADMIN")]
     public async Task<IActionResult> Editar(int id, [FromBody] CategoriaInputDto dto)
     {
-        var categoria = await _context.Categorias.FindAsync(id);
-        if (categoria == null)
-        {
-            return NotFound(new { mensagem = "Categoria não encontrada." });
-        }
-
-        if (string.IsNullOrWhiteSpace(dto.Nome))
+        if (dto == null || string.IsNullOrWhiteSpace(dto.Nome))
         {
             return BadRequest(new { mensagem = "O nome da categoria não pode ser vazio." });
         }
 
-        categoria.Nome = dto.Nome.Trim();
-        await _context.SaveChangesAsync();
+        try
+        {
+            var nomeClean = dto.Nome.Trim();
+            var descClean = dto.Descricao?.Trim() ?? string.Empty;
 
-        return Ok(new { mensagem = "Categoria atualizada com sucesso!" });
+            var affected = await _context.Database.ExecuteSqlRawAsync(
+                "UPDATE \"Categorias\" SET \"Nome\" = {0}, \"Descricao\" = {1} WHERE \"Id\" = {2}",
+                nomeClean, descClean, id);
+
+            if (affected == 0)
+            {
+                affected = await _context.Database.ExecuteSqlRawAsync(
+                    "UPDATE categorias SET nome = {0}, descricao = {1} WHERE id = {2}",
+                    nomeClean, descClean, id);
+            }
+
+            return Ok(new { mensagem = "Categoria atualizada com sucesso!" });
+        }
+        catch (Exception ex)
+        {
+            var msg = ex.InnerException?.Message ?? ex.Message;
+            return StatusCode(500, new { mensagem = $"Erro ao atualizar: {msg}" });
+        }
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "ADMIN")]
+    [HttpPatch("{id}/inativar")]
     public async Task<IActionResult> Excluir(int id)
     {
-        var categoria = await _context.Categorias.FindAsync(id);
-        if (categoria == null)
+        try
         {
-            return NotFound(new { mensagem = "Categoria não encontrada." });
+            var affected = await _context.Database.ExecuteSqlRawAsync(
+                "UPDATE \"Categorias\" SET \"Ativa\" = NOT \"Ativa\" WHERE \"Id\" = {0}", id);
+
+            if (affected == 0)
+            {
+                await _context.Database.ExecuteSqlRawAsync(
+                    "UPDATE categorias SET ativa = NOT ativa WHERE id = {0}", id);
+            }
+
+            return Ok(new { mensagem = "Status alterado com sucesso!" });
         }
-
-        _context.Categorias.Remove(categoria);
-        await _context.SaveChangesAsync();
-
-        return Ok(new { mensagem = "Categoria removida com sucesso!" });
+        catch (Exception ex)
+        {
+            var msg = ex.InnerException?.Message ?? ex.Message;
+            return StatusCode(500, new { mensagem = $"Erro ao alterar status: {msg}" });
+        }
     }
-}
-
-public class CategoriaInputDto
-{
-    public string Nome { get; set; } = string.Empty;
 }

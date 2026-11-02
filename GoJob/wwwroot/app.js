@@ -291,35 +291,87 @@ class UsuarioService {
 }
 
 class CategoriaService {
-    listarAtivas() {
-        /* fetch(`${API_BASE_URL}/categorias?ativa=true`) */
-        return db.categorias.filter((c) => c.estaAtiva());
+    async listarAtivas() {
+        const res = await fetch(`${API_BASE_URL}/categorias?ativa=true`);
+        if (!res.ok) throw new GojobException("Erro ao carregar categorias ativas.");
+        return await res.json();
     }
-    listarTodas() { return db.categorias; }
 
-    criarCategoria(nome, descricao, solicitante) {
-        if (solicitante?.tipo !== "ADMIN") throw new OperacaoNaoPermitidaException(); // RN08
-        if (!nome) throw new DadosObrigatoriosException("nome");
-        const nova = new Categoria(db.proximoId.categoria++, nome, descricao, true);
-        db.categorias.push(nova);
-        /* fetch(`${API_BASE_URL}/categorias`, { method: "POST", body: JSON.stringify({ nome, descricao }) }) */
-        return nova;
+    async listarTodas() {
+        const res = await fetch(`${API_BASE_URL}/categorias`);
+        if (!res.ok) throw new GojobException("Erro ao carregar categorias.");
+        return await res.json();
     }
-    editarCategoria(id, nome, descricao, solicitante) {
-        if (solicitante?.tipo !== "ADMIN") throw new OperacaoNaoPermitidaException();
-        const cat = db.categorias.find((c) => c.id === id);
-        if (!cat) throw new GojobException("Categoria não encontrada.");
-        cat.nome = nome;
-        cat.descricao = descricao;
-        /* fetch(`${API_BASE_URL}/categorias/${id}`, { method: "PUT", body: JSON.stringify({ nome, descricao }) }) */
-        return cat;
+
+    async obterTodas() {
+        return await this.listarTodas();
     }
-    inativarCategoria(id, solicitante) {
-        if (solicitante?.tipo !== "ADMIN") throw new OperacaoNaoPermitidaException();
-        const cat = db.categorias.find((c) => c.id === id);
-        if (!cat) throw new GojobException("Categoria não encontrada.");
-        cat.inativar(); // RF05
-        /* fetch(`${API_BASE_URL}/categorias/${id}/inativar`, { method: "PATCH" }) */
+
+    async criarCategoria(nome, descricao, solicitante) {
+        if (solicitante && solicitante.tipo !== "ADMIN") {
+            throw new OperacaoNaoPermitidaException();
+        }
+        if (!nome || !nome.trim()) {
+            throw new DadosObrigatoriosException("nome");
+        }
+
+        const res = await fetch(`${API_BASE_URL}/categorias`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                nome: nome.trim(),
+                descricao: descricao ? descricao.trim() : ""
+            })
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new GojobException(err.mensagem || "Erro ao criar categoria.");
+        }
+
+        return await res.json();
+    }
+
+    async editarCategoria(id, nome, descricao, solicitante) {
+        if (solicitante && solicitante.tipo !== "ADMIN") {
+            throw new OperacaoNaoPermitidaException();
+        }
+
+        const res = await fetch(`${API_BASE_URL}/categorias/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                nome: String(nome || "").trim(),
+                descricao: String(descricao || "").trim()
+            })
+        });
+
+        if (!res.ok) {
+            const text = await res.text();
+            console.error("RESPOSTA BRUTA DO ERRO 500:", text);
+            let err = {};
+            try { err = JSON.parse(text); } catch (e) { }
+            throw new GojobException(err.mensagem || text || "Erro ao editar categoria.");
+        }
+
+        return await res.json();
+    }
+
+    async inativarCategoria(id, solicitante) {
+        if (solicitante && solicitante.tipo !== "ADMIN") {
+            throw new OperacaoNaoPermitidaException();
+        }
+
+        const res = await fetch(`${API_BASE_URL}/categorias/${id}`, {
+            method: "DELETE"
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new GojobException(err.mensagem || "Erro ao inativar categoria.");
+        }
+
+        return await res.json();
     }
 }
 
@@ -331,7 +383,22 @@ class ProfissionalService {
         }
         return await res.json();
     }
+    async inativarPerfil(id) {
+        const res = await fetch(`${API_BASE_URL}/profissionais/${id}/inativar`, {
+            method: "DELETE"
+        });
 
+        if (!res.ok) {
+            let mensagem = "Erro ao inativar perfil.";
+            try {
+                const erro = await res.json();
+                mensagem = erro.mensagem || mensagem;
+            } catch (e) { }
+            throw new GojobException(mensagem);
+        }
+
+        return await res.json();
+    }
     async configurarPerfil(idProfissional, { categoriaIds, endereco }) {
         const res = await fetch(`${API_BASE_URL}/profissionais/${idProfissional}/perfil`, {
             method: "PUT",
@@ -479,7 +546,12 @@ function gojobApp() {
         resultados: [],
         search: { categoriaId: "", cidade: "", bairro: "" },
 
-        session: { logado: false, id: null, role: null, nome: null },
+        session: {
+            logado: false,
+            id: null,
+            role: null, // Pode ser 'CLIENTE', 'PROFISSIONAL' ou 'ADMIN'
+            nome: null
+        },
 
         authModal: { open: false, tab: "login" },
         loginForm: { email: "", senha: "" },
@@ -495,15 +567,23 @@ function gojobApp() {
         categoriaModal: { open: false, id: null, nome: "", descricao: "" },
 
         /* ---------------- ciclo de vida ---------------- */
-        init() {
-            this.atualizarSessaoUI();
+        async init() {
+            // Carrega a sessão de forma assíncrona antes de renderizar a interface
+            await this.atualizarSessaoUI();
+
             this.$nextTick(() => {
                 if (typeof lucide !== 'undefined') {
                     lucide.createIcons();
                 }
-                // this.animarEntradaHero(); // Desativado para a barra de pesquisa não ficar invisível
             });
-            this.$watch("view", () => this.$nextTick(() => typeof lucide !== 'undefined' && lucide.createIcons()));
+
+            // Observadores para re-renderizar os ícones do Lucide
+            this.$watch("view", (novaView) => {
+                if (novaView === "admin") {
+                    this.carregarDadosAdmin();
+                }
+                this.$nextTick(() => typeof lucide !== 'undefined' && lucide.createIcons());
+            });
             this.$watch("perfilAberto", () => this.$nextTick(() => typeof lucide !== 'undefined' && lucide.createIcons()));
             this.$watch("authModal.open", () => this.$nextTick(() => typeof lucide !== 'undefined' && lucide.createIcons()));
             this.$watch("cadastroForm.tipo", () => this.$nextTick(() => typeof lucide !== 'undefined' && lucide.createIcons()));
@@ -521,6 +601,7 @@ function gojobApp() {
                 heroSearch.style.transform = "none";
             }
         },
+
         animarCards() {
             const cards = document.querySelectorAll("#cards-grid .prof-card");
             cards.forEach((c) => {
@@ -531,14 +612,29 @@ function gojobApp() {
         },
 
         /* ---------------- navegação ---------------- */
-        setView(v) { this.view = v; window.scrollTo({ top: 0, behavior: "smooth" }); },
-        goHome() { this.view = "home"; this.mobileMenu = false; window.scrollTo({ top: 0, behavior: "smooth" }); },
+        setView(v) {
+            this.view = v;
+            if (v === "admin") {
+                this.carregarDadosAdmin();
+            }
+            window.scrollTo({ top: 0, behavior: "smooth" });
+        },
+
+        goHome() {
+            this.view = "home";
+            this.mobileMenu = false;
+            window.scrollTo({ top: 0, behavior: "smooth" });
+        },
+
         scrollToHow() {
             this.view = "home";
             this.$nextTick(() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" }));
         },
-        roleLabel(role) { return { CLIENTE: "Cliente", PROFISSIONAL: "Profissional", ADMIN: "Administrador" }[role] || ""; },
 
+        roleLabel(role) {
+            const r = String(role || "").trim().toUpperCase();
+            return { CLIENTE: "Cliente", PROFISSIONAL: "Profissional", ADMIN: "Administrador" }[r] || "Cliente";
+        },
         /* ---------------- categorias (helpers) ---------------- */
         categoriasAtivas() { return this.categorias.filter((c) => c.ativa); },
         nomeCategoria(id) { return this.categorias.find((c) => c.id === id)?.nome || ""; },
@@ -619,6 +715,33 @@ function gojobApp() {
                 return new Date(iso).toLocaleDateString("pt-BR");
             } catch {
                 return "Recente";
+            }
+        },
+        /* ---------------- ações do perfil / dashboard ---------------- */
+        async inativarMinhaConta() {
+            const idProfissional = this.session?.id || this.usuarioLogado?.id;
+
+            if (!idProfissional) {
+                toastErro("Sessão inválida.");
+                return;
+            }
+
+            if (!confirm("Tem certeza de que deseja inativar o seu perfil? Seus dados pessoais serão anonimizados, mas sua reputação e avaliações históricas serão mantidas.")) {
+                return;
+            }
+
+            try {
+                await profissionalService.inativarPerfil(idProfissional);
+                toastSucesso("Perfil inativado com sucesso.");
+
+                if (typeof this.fazerLogout === "function") {
+                    this.fazerLogout();
+                } else {
+                    localStorage.clear();
+                    window.location.reload();
+                }
+            } catch (e) {
+                toastErro(e.message || "Erro ao tentar inativar a conta.");
             }
         },
 
@@ -749,54 +872,48 @@ function gojobApp() {
         salvarSessao(usuario, token) {
             if (!usuario) return;
 
-            // Normaliza o tipo de utilizador (PROFISSIONAL, CLIENTE, ADMIN)
-            const roleUsuario = usuario.tipo || usuario.tipoUsuario || usuario.TipoUsuario || "CLIENTE";
+            // Procura o TipoUsuario retornado pelo Supabase/C#
+            const rawRole = usuario.TipoUsuario || usuario.tipoUsuario || usuario.tipo || usuario.role || "CLIENTE";
+            const roleUpper = String(rawRole).trim().toUpperCase();
 
             const dadosUsuario = {
-                id: usuario.id ?? usuario.usuarioId ?? usuario.Id,
+                id: usuario.id ?? usuario.Id,
                 nome: usuario.nome ?? usuario.Nome ?? "",
-                role: String(roleUsuario).toUpperCase()
+                role: roleUpper
             };
 
-            localStorage.setItem(STORAGE_TOKEN_KEY, token || "demo-jwt-token");
-            localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(dadosUsuario));
+            // Atualiza o estado reativo do Alpine
+            this.session = {
+                logado: true,
+                id: dadosUsuario.id,
+                nome: dadosUsuario.nome,
+                role: dadosUsuario.role
+            };
+
+            localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(this.session));
+            if (token) {
+                localStorage.setItem(STORAGE_TOKEN_KEY, token);
+            }
         },
 
         async atualizarSessaoUI() {
-            const token = localStorage.getItem(STORAGE_TOKEN_KEY);
-            const dadosUsuario = localStorage.getItem(STORAGE_USER_KEY);
+            const dadosUserJson = localStorage.getItem(STORAGE_USER_KEY);
 
-            if (!token || !dadosUsuario) {
+            if (!dadosUserJson) {
                 this.session = { logado: false, id: null, role: null, nome: null };
                 return;
             }
 
             try {
-                const { id, nome, role } = JSON.parse(dadosUsuario);
-                const roleUpper = String(role || "").trim().toUpperCase();
+                const userObj = JSON.parse(dadosUserJson);
+                const roleUpper = String(userObj.role || userObj.TipoUsuario || userObj.tipoUsuario || "CLIENTE").trim().toUpperCase();
 
                 this.session = {
                     logado: true,
-                    id: id,
-                    role: roleUpper,
-                    nome: nome
+                    id: userObj.id,
+                    nome: userObj.nome,
+                    role: roleUpper
                 };
-
-                if (roleUpper === "PROFISSIONAL" || roleUpper === "ADMIN") {
-                    try {
-                        const profissional = await profissionalService.buscarPorId(id);
-                        this.dash.categorias = profissional.categoriasIds || [];
-                        this.dash.endereco = {
-                            logradouro: "",
-                            bairro: profissional.bairro || "",
-                            cidade: profissional.cidade || "",
-                            estado: profissional.estado || ""
-                        };
-                    } catch (err) {
-                        this.dash.categorias = [];
-                        this.dash.endereco = { logradouro: "", bairro: "", cidade: "", estado: "" };
-                    }
-                }
             } catch (e) {
                 this.session = { logado: false, id: null, role: null, nome: null };
             }
@@ -811,8 +928,14 @@ function gojobApp() {
             toastSucesso("Sessão encerrada com sucesso!");
         },
 
-        primeiroNome(nome) { return (nome || "").split(" ")[0]; },
-        temPainel() { return this.session.role === "PROFISSIONAL" || this.session.role === "ADMIN"; },
+        primeiroNome(nome) {
+            return (nome || "").split(" ")[0];
+        },
+
+        temPainel() {
+            return this.session.role === "PROFISSIONAL" || this.session.role === "ADMIN";
+        },
+
         irParaPainel() {
             if (this.session.role === "PROFISSIONAL") this.setView("dashboard");
             else if (this.session.role === "ADMIN") this.setView("admin");
@@ -865,42 +988,90 @@ function gojobApp() {
         },
 
         /* ---------------- painel administrador (RF03–RF05, RF12) ---------------- */
+        /* ---------------- painel administrador (RF03-RF05, RF12) ---------------- */
+        async carregarDadosAdmin() {
+            // 1. Carrega as categorias do backend C#
+            try {
+                const resCat = await fetch('/api/categorias');
+                if (resCat.ok) {
+                    this.categorias = await resCat.json();
+                }
+            } catch (e) {
+                console.error("Erro ao carregar categorias no painel admin:", e);
+            }
+
+            // 2. Carrega os profissionais do backend C# para a tabela inferior (RF12)
+            try {
+                const resProf = await fetch('/api/profissionais');
+                if (resProf.ok) {
+                    this.profissionais = await resProf.json();
+                }
+            } catch (e) {
+                console.error("Erro ao carregar profissionais no painel admin:", e);
+            }
+        },
+
         abrirModalCategoria(id = null) {
             if (id) {
                 const cat = this.categorias.find((c) => c.id === id);
-                this.categoriaModal = { open: true, id, nome: cat.nome, descricao: cat.descricao };
+                this.categoriaModal = { open: true, id, nome: cat ? cat.nome : "", descricao: cat ? cat.descricao : "" };
             } else {
                 this.categoriaModal = { open: true, id: null, nome: "", descricao: "" };
             }
         },
-        salvarCategoria() {
+
+        async salvarCategoria() {
+            if (!this.categoriaModal.nome.trim()) {
+                toastErro("Informe o nome da categoria.");
+                return;
+            }
+
             try {
                 const admin = { tipo: this.session.role };
                 if (this.categoriaModal.id) {
-                    categoriaService.editarCategoria(this.categoriaModal.id, this.categoriaModal.nome, this.categoriaModal.descricao, admin);
+                    await categoriaService.editarCategoria(this.categoriaModal.id, this.categoriaModal.nome, this.categoriaModal.descricao, admin);
                     toastSucesso("Categoria atualizada.");
                 } else {
-                    categoriaService.criarCategoria(this.categoriaModal.nome, this.categoriaModal.descricao, admin);
+                    await categoriaService.criarCategoria(this.categoriaModal.nome, this.categoriaModal.descricao, admin);
                     toastSucesso("Categoria criada.");
                 }
                 this.categoriaModal.open = false;
-            } catch (e) { toastErro(e.message); }
+                await this.carregarDadosAdmin(); // Atualiza as tabelas na tela
+            } catch (e) {
+                toastErro(e.message || "Erro ao salvar categoria.");
+            }
         },
+
         async inativarCategoria(id) {
-            const ok = await confirmarAcao("Inativar categoria?", "Ela deixará de aparecer em novas buscas e vínculos.");
+            const ok = typeof confirmarAcao === "function"
+                ? await confirmarAcao("Inativar categoria?", "Ela deixará de aparecer em novas buscas e vínculos.")
+                : confirm("Tem certeza que deseja inativar esta categoria?");
+
             if (!ok) return;
+
             try {
-                categoriaService.inativarCategoria(id, { tipo: this.session.role });
+                await categoriaService.inativarCategoria(id, { tipo: this.session.role });
                 toastSucesso("Categoria inativada.");
-            } catch (e) { toastErro(e.message); }
+                await this.carregarDadosAdmin(); // Recarrega a lista
+            } catch (e) {
+                toastErro(e.message || "Erro ao inativar categoria.");
+            }
         },
+
         async inativarProfissional(id) {
-            const ok = await confirmarAcao("Inativar conta do profissional?", "As avaliações vinculadas serão anonimizadas.");
+            const ok = typeof confirmarAcao === "function"
+                ? await confirmarAcao("Inativar conta do profissional?", "As avaliações vinculadas serão anonimizadas.")
+                : confirm("Tem certeza que deseja inativar este profissional?");
+
             if (!ok) return;
+
             try {
-                profissionalService.inativarConta(id, { tipo: this.session.role });
+                await profissionalService.inativarPerfil(id);
                 toastSucesso("Conta inativada e avaliações anonimizadas.");
-            } catch (e) { toastErro(e.message); }
-        },
-    };
+                await this.carregarDadosAdmin(); // Recarrega a lista
+            } catch (e) {
+                toastErro(e.message || "Erro ao inativar profissional.");
+            }
+        }
+    }
 }

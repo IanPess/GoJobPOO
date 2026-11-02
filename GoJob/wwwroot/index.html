@@ -65,7 +65,7 @@
 <body class="bg-ink-950 text-bone-100 font-body antialiased selection:bg-moss-500/30" x-data="gojobApp()" x-init="init()">
 
     <!-- =========================================================
-         HEADER / NAVBAR
+         HEADER / NAVBAR (Suporte Completo a CLIENTE, PROFISSIONAL e ADMIN)
     ========================================================= -->
     <header class="fixed top-0 inset-x-0 z-40 border-b border-ink-800/80 bg-ink-950/85 backdrop-blur-md">
         <div class="mx-auto max-w-6xl px-5 sm:px-8 h-16 flex items-center justify-between">
@@ -77,11 +77,13 @@
             <nav class="hidden md:flex items-center gap-8 text-sm text-bone-200/80 font-medium">
                 <button class="hover:text-bone-100 transition-colors" @click="goHome()">Buscar profissionais</button>
                 <button class="hover:text-bone-100 transition-colors" @click="scrollToHow()">Como funciona</button>
-                <template x-if="session.role === 'PROFISSIONAL'">
+
+                <template x-if="String(session.role || '').toUpperCase() === 'PROFISSIONAL'">
                     <button class="hover:text-bone-100 transition-colors" @click="setView('dashboard')">Meu painel</button>
                 </template>
-                <template x-if="session.role === 'ADMIN'">
-                    <button class="hover:text-bone-100 transition-colors" @click="setView('admin')">Administração</button>
+
+                <template x-if="String(session.role || '').toUpperCase() === 'ADMIN'">
+                    <button class="text-moss-400 hover:text-moss-300 font-semibold transition-colors" @click="setView('admin')">Administração</button>
                 </template>
             </nav>
 
@@ -92,11 +94,14 @@
                         <button @click="openAuth('cadastro')" class="px-4 py-2 text-sm font-medium rounded-xl bg-moss-500 text-ink-950 hover:bg-moss-400 transition-colors shadow-soft">Cadastrar</button>
                     </div>
                 </template>
+
                 <template x-if="session.logado">
                     <div class="hidden sm:flex items-center gap-3">
                         <span class="text-xs px-2.5 py-1 rounded-full border border-ink-700 text-bone-200/70" x-text="roleLabel(session.role)"></span>
                         <button class="text-sm font-medium text-bone-100 hover:text-moss-300 transition-colors" @click="irParaPainel()" x-text="'Olá, ' + primeiroNome(session.nome)"></button>
-                        <button x-show="temPainel()" @click="irParaPainel()" class="text-sm text-bone-200/70 hover:text-bone-100 transition-colors border border-ink-700 rounded-lg px-3 py-1.5">Meu painel</button>
+
+                        <button x-show="temPainel()" @click="irParaPainel()" class="text-sm text-bone-200/70 hover:text-bone-100 transition-colors border border-ink-700 rounded-lg px-3 py-1.5" x-text="String(session.role || '').toUpperCase() === 'ADMIN' ? 'Painel Admin' : 'Meu painel'"></button>
+
                         <button @click="fazerLogout()" class="flex items-center gap-1.5 text-sm text-bone-100 hover:text-clay-400 transition-colors border border-ink-700 hover:border-clay-400/50 rounded-lg px-3 py-1.5" title="Sair">
                             <i data-lucide="log-out" class="w-4 h-4"></i> Sair
                         </button>
@@ -115,12 +120,15 @@
         <div x-show="mobileMenu" x-cloak x-transition class="md:hidden border-t border-ink-800 bg-ink-950 px-5 py-4 space-y-3">
             <button class="block w-full text-left py-1.5 text-bone-200" @click="goHome(); mobileMenu=false">Buscar profissionais</button>
             <button class="block w-full text-left py-1.5 text-bone-200" @click="scrollToHow(); mobileMenu=false">Como funciona</button>
-            <template x-if="session.role === 'PROFISSIONAL'">
+
+            <template x-if="String(session.role || '').toUpperCase() === 'PROFISSIONAL'">
                 <button class="block w-full text-left py-1.5 text-bone-200" @click="setView('dashboard'); mobileMenu=false">Meu painel</button>
             </template>
-            <template x-if="session.role === 'ADMIN'">
-                <button class="block w-full text-left py-1.5 text-bone-200" @click="setView('admin'); mobileMenu=false">Administração</button>
+
+            <template x-if="String(session.role || '').toUpperCase() === 'ADMIN'">
+                <button class="block w-full text-left py-1.5 text-moss-400 font-semibold" @click="setView('admin'); mobileMenu=false">Administração</button>
             </template>
+
             <div class="pt-2 border-t border-ink-800">
                 <template x-if="!session.logado">
                     <div class="flex gap-2 pt-3">
@@ -128,6 +136,7 @@
                         <button @click="openAuth('cadastro'); mobileMenu=false" class="flex-1 px-4 py-2.5 text-sm font-medium rounded-xl bg-moss-500 text-ink-950">Cadastrar</button>
                     </div>
                 </template>
+
                 <template x-if="session.logado">
                     <div class="pt-3 space-y-3">
                         <div class="flex items-center justify-between">
@@ -139,11 +148,54 @@
                                 <i data-lucide="log-out" class="w-4 h-4"></i> Sair
                             </button>
                         </div>
-                        <button x-show="temPainel()" @click="irParaPainel(); mobileMenu=false" class="w-full text-left py-1.5 text-bone-200 border-t border-ink-800 pt-3">Meu painel</button>
+                        <button x-show="temPainel()" @click="irParaPainel(); mobileMenu=false" class="w-full text-left py-1.5 text-bone-200 border-t border-ink-800 pt-3" x-text="String(session.role || '').toUpperCase() === 'ADMIN' ? 'Painel Admin' : 'Meu painel'"></button>
                     </div>
                 </template>
             </div>
         </div>
+    </header>
+
+    <!-- Mobile hamburger -->
+    <button class="md:hidden w-9 h-9 grid place-items-center rounded-lg border border-ink-700 text-bone-100" @click="mobileMenu = !mobileMenu">
+        <i data-lucide="menu" class="w-5 h-5" x-show="!mobileMenu"></i>
+        <i data-lucide="x" class="w-5 h-5" x-show="mobileMenu" x-cloak></i>
+    </button>
+    </div>
+    </div>
+
+    <!-- Mobile menu panel -->
+    <div x-show="mobileMenu" x-cloak x-transition class="md:hidden border-t border-ink-800 bg-ink-950 px-5 py-4 space-y-3">
+        <button class="block w-full text-left py-1.5 text-bone-200" @click="goHome(); mobileMenu=false">Buscar profissionais</button>
+        <button class="block w-full text-left py-1.5 text-bone-200" @click="scrollToHow(); mobileMenu=false">Como funciona</button>
+        <template x-if="session.role === 'PROFISSIONAL'">
+            <button class="block w-full text-left py-1.5 text-bone-200" @click="setView('dashboard'); mobileMenu=false">Meu painel</button>
+        </template>
+        <template x-if="session.role === 'ADMIN'">
+            <button class="block w-full text-left py-1.5 text-bone-200" @click="setView('admin'); mobileMenu=false">Administração</button>
+        </template>
+        <div class="pt-2 border-t border-ink-800">
+            <template x-if="!session.logado">
+                <div class="flex gap-2 pt-3">
+                    <button @click="openAuth('login'); mobileMenu=false" class="flex-1 px-4 py-2.5 text-sm font-medium rounded-xl border border-ink-700 text-bone-100">Entrar</button>
+                    <button @click="openAuth('cadastro'); mobileMenu=false" class="flex-1 px-4 py-2.5 text-sm font-medium rounded-xl bg-moss-500 text-ink-950">Cadastrar</button>
+                </div>
+            </template>
+            <template x-if="session.logado">
+                <div class="pt-3 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium" x-text="'Olá, ' + primeiroNome(session.nome)"></p>
+                            <p class="text-xs text-bone-200/60" x-text="roleLabel(session.role)"></p>
+                        </div>
+                        <button @click="fazerLogout(); mobileMenu=false" class="flex items-center gap-1.5 text-sm text-bone-100 border border-ink-700 rounded-lg px-3 py-1.5">
+                            <i data-lucide="log-out" class="w-4 h-4"></i> Sair
+                        </button>
+                    </div>
+                    <button x-show="temPainel()" @click="irParaPainel(); mobileMenu=false" class="w-full text-left py-1.5 text-bone-200 border-t border-ink-800 pt-3">Meu painel</button>
+                </div>
+            </template>
+        </div>
+    </div>
     </header>
 
     <main class="pt-16">
@@ -286,7 +338,7 @@
         </section>
 
         <!-- =========================================================
-             VIEW 4 — DASHBOARD DO PROFISSIONAL (RF06)
+             VIEW 4 — DASHBOARD DO PROFISSIONAL (RF06, RF07, RN10)
         ========================================================= -->
         <section x-show="view === 'dashboard'" x-cloak class="mx-auto max-w-3xl px-5 sm:px-8 pt-10 pb-24 min-h-[60vh]">
             <h2 class="font-display font-700 text-2xl text-bone-100">Configurar meu perfil profissional</h2>
@@ -337,6 +389,19 @@
                     </div>
                     <p class="text-sm text-bone-200/60" x-text="minhasAvaliacoes().length + ' avaliação(ões) recebida(s)'"></p>
                 </div>
+            </div>
+
+            <!-- Zona de Perigo — Inativação de Perfil (RF07, RN10) -->
+            <div class="mt-10 bg-ink-900/60 border border-red-500/20 rounded-3xl p-6">
+                <h3 class="font-display font-700 text-base text-red-400 mb-2">Inativar conta</h3>
+                <p class="text-xs text-bone-200/60 mb-5 leading-relaxed">
+                    Ao inativar sua conta, seus dados pessoais (nome, e-mail e endereço) serão anonimizados e suas categorias serão removidas. Suas avaliações recebidas e sua nota histórica continuarão registradas para integridade do sistema (RN10).
+                </p>
+                <button type="button"
+                        @click="inativarMinhaConta()"
+                        class="px-5 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl text-sm font-semibold transition-colors">
+                    Inativar minha conta
+                </button>
             </div>
         </section>
 
@@ -391,7 +456,8 @@
                         <div class="flex items-center justify-between px-5 py-3.5">
                             <div>
                                 <p class="text-sm font-medium text-bone-100" x-text="p.nome"></p>
-                                <p class="text-xs text-bone-200/50" x-text="p.endereco.cidade"></p>
+                                <!-- Exemplo de como deve ficar na coluna de localização/cidade -->
+                                <p class="text-xs text-bone-200/50" x-text="p.cidade || p.endereco?.cidade || 'Não informada'"></p>
                             </div>
                             <div class="flex items-center gap-3">
                                 <span class="text-[11px] px-2.5 py-1 rounded-full border" :class="p.ativo ? 'border-moss-500/40 text-moss-300' : 'border-ink-700 text-bone-200/40'" x-text="p.ativo ? 'Ativa' : 'Inativa'"></span>
@@ -473,7 +539,7 @@
                         </template>
 
                         <template x-for="av in (perfilAtual.avaliacoes || [])" :key="'av-'+av.id">
-                            <div class="border-b border-ink-800 pb-4 last:border-0">
+                            <div class="border-b border-ink-800 pb-4 last:border-0 relative">
                                 <div class="flex items-center justify-between">
                                     <div class="flex gap-0.5">
                                         <template x-for="n in [1, 2, 3, 4, 5]" :key="'avstar-'+av.id+'-'+n">
@@ -482,7 +548,19 @@
                                             </svg>
                                         </template>
                                     </div>
-                                    <span class="text-[11px] text-bone-200/40" x-text="av.dataCriacao || 'Recente'"></span>
+
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-[11px] text-bone-200/40" x-text="av.dataCriacao || 'Recente'"></span>
+
+                                        <!-- RN06: Botão de Apagar (Exibe só se for a avaliação do próprio cliente conectado) -->
+                                        <template x-if="av.clienteId === (session?.id || usuarioLogado?.id)">
+                                            <button type="button" @click="excluirAvaliacao(av.id)" class="text-red-400 hover:text-red-300 p-1" title="Excluir minha avaliação">
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </template>
+                                    </div>
                                 </div>
                                 <p class="text-sm text-bone-200/75 mt-2 leading-relaxed" x-text="av.comentario"></p>
                                 <p class="text-[11px] text-bone-200/40 mt-1" x-text="av.nomeCliente || 'Cliente'"></p>
