@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using GoJob.Data;
 using GoJob.Domain;
+using GoJob.DTOs;
 
 namespace GoJob.Controllers;
 

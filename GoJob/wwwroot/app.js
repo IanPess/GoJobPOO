@@ -444,7 +444,8 @@ class ProfissionalService {
         if (!res.ok) {
             throw new GojobException("Erro ao buscar profissionais.");
         }
-        return await res.json();
+        const lista = await res.json();
+        return lista.filter(p => p.ativo !== false);
     }
 }
 
