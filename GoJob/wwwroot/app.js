@@ -125,36 +125,63 @@ class Cliente extends Usuario {
 
 class Profissional extends Usuario {
     #categorias = [];
+
     constructor(id, nome, email, senhaHash, telefone) {
         super(id, nome, email, senhaHash, telefone);
         this.tipo = "PROFISSIONAL";
         this.reputacaoMedia = 0;
         this.endereco = null;
     }
+
     get categorias() { return this.#categorias; }
-    set categorias(lista) { this.#categorias = lista; }
+    set categorias(lista) {
+        // Garante que lista seja sempre um array simples de IDs numéricos
+        this.#categorias = Array.isArray(lista)
+            ? lista.map(c => typeof c === 'object' ? (c.id ?? c.Id) : c)
+            : [];
+    }
 
     configurarEndereco(endereco) {
-        if (!endereco.validarCamposObrigatorios()) {
+        if (typeof endereco?.validarCamposObrigatorios === 'function' && !endereco.validarCamposObrigatorios()) {
             throw new DadosObrigatoriosException("logradouro/cidade/estado");
         }
         this.endereco = endereco;
     }
+
     adicionarCategoria(categoria) {
-        if (!categoria.estaAtiva()) throw new CategoriaInativaException(categoria.nome);
-        if (this.#categorias.includes(categoria.id)) return;
-        if (this.#categorias.length >= 3) throw new LimiteCategoriasException();
-        this.#categorias.push(categoria.id);
+        // Extrai o ID e verifica se o objeto categoria veio validado
+        const catId = typeof categoria === 'object' ? (categoria.id ?? categoria.Id) : categoria;
+
+        if (typeof categoria === 'object' && typeof categoria.estaAtiva === 'function') {
+            if (!categoria.estaAtiva()) throw new CategoriaInativaException(categoria.nome || 'Categoria');
+        }
+
+        // Se já contiver o ID, não adiciona duplicado
+        if (this.#categorias.includes(catId)) return;
+
+        // RN05: Limite de no máximo 3 categorias
+        if (this.#categorias.length >= 3) {
+            throw new LimiteCategoriasException();
+        }
+
+        this.#categorias.push(catId);
     }
+
     removerCategoria(categoriaId) {
-        this.#categorias = this.#categorias.filter((c) => c !== categoriaId);
+        const idParaRemover = typeof categoriaId === 'object' ? (categoriaId.id ?? categoriaId.Id) : categoriaId;
+        this.#categorias = this.#categorias.filter((c) => c !== idParaRemover);
     }
+
     calcularReputacao(avaliacoes) {
-        if (avaliacoes.length === 0) { this.reputacaoMedia = 0; return 0; }
-        const soma = avaliacoes.reduce((acc, av) => acc + av.nota, 0);
+        if (!avaliacoes || avaliacoes.length === 0) {
+            this.reputacaoMedia = 0;
+            return 0;
+        }
+        const soma = avaliacoes.reduce((acc, av) => acc + (av.nota || 0), 0);
         this.reputacaoMedia = soma / avaliacoes.length;
         return this.reputacaoMedia;
     }
+
     obterResumoPerfil() {
         // RN07 — nunca expõe e-mail, hash de senha ou tipo de usuário sensível
         return {
@@ -175,42 +202,75 @@ class Administrador extends Usuario {
 }
 
 /* ---------------------------------------------------------------------
-   3. DADOS-BASE PARA A PRÉVIA (substituídos pelas tabelas reais via API)
+   3. DADOS-BASE (Carregados dinamicamente via API REST C#)
 --------------------------------------------------------------------- */
-const seedCategorias = [
-    new Categoria(1, "Elétrica", "Instalações, reparos e manutenção elétrica residencial e comercial."),
-    new Categoria(2, "Limpeza", "Faxina residencial, comercial e pós-obra."),
-    new Categoria(3, "Pintura", "Pintura de paredes, fachadas e retoques."),
-    new Categoria(4, "Encanamento", "Reparos hidráulicos, vazamentos e instalações."),
-    new Categoria(5, "Jardinagem", "Manutenção de jardins, poda e paisagismo."),
-    new Categoria(6, "Montagem de Móveis", "Montagem e pequenos reparos de móveis planejados."),
-    new Categoria(7, "Aulas Particulares", "Reforço escolar e aulas de idiomas."),
-    new Categoria(8, "Manutenção de TI", "Suporte técnico e manutenção de computadores.", false),
-];
 
-const seedProfissionais = [
-    { id: 101, nome: "Marcos Andrade", email: "marcos@exemplo.com", senha: "123456", telefone: "18999990001", categorias: [1, 6], endereco: { logradouro: "Rua das Palmeiras, 120", bairro: "Centro", cidade: "Birigui", estado: "SP" } },
-    { id: 102, nome: "Fernanda Lima", email: "fernanda@exemplo.com", senha: "123456", telefone: "18999990002", categorias: [2], endereco: { logradouro: "Av. Brasil, 800", bairro: "Vila Iracema", cidade: "Birigui", estado: "SP" } },
-    { id: 103, nome: "Carlos Eduardo", email: "carlos@exemplo.com", senha: "123456", telefone: "18999990003", categorias: [3, 4], endereco: { logradouro: "Rua Sete de Setembro, 45", bairro: "Jardim Planalto", cidade: "Birigui", estado: "SP" } },
-    { id: 104, nome: "Juliana Ferraz", email: "juliana@exemplo.com", senha: "123456", telefone: "18999990004", categorias: [7], endereco: { logradouro: "Rua Amazonas, 300", bairro: "Centro", cidade: "Araçatuba", estado: "SP" } },
-    { id: 105, nome: "Roberto Nunes", email: "roberto@exemplo.com", senha: "123456", telefone: "18999990005", categorias: [5], endereco: { logradouro: "Rua das Flores, 15", bairro: "Jardim Europa", cidade: "Birigui", estado: "SP" } },
-    { id: 106, nome: "Patrícia Souza", email: "patricia@exemplo.com", senha: "123456", telefone: "18999990006", categorias: [2, 6], endereco: { logradouro: "Av. Portugal, 512", bairro: "Vila Mendonça", cidade: "Araçatuba", estado: "SP" } },
-];
+// Arrays dinâmicos mantidos na memória para renderização no front-end
+let seedCategorias = [];
+let seedProfissionais = [];
+let seedClientes = [];
+let seedAvaliacoes = [];
 
-const seedClientes = [
-    { id: 201, nome: "Ana Beatriz", email: "ana@exemplo.com", senha: "123456", telefone: "18988880001" },
-    { id: 202, nome: "Pedro Henrique", email: "pedro@exemplo.com", senha: "123456", telefone: "18988880002" },
-];
+// Objeto padrão para sessão/administrador
+const seedAdmin = {
+    id: 901,
+    nome: "Administrador GOJOB",
+    email: "admin@gojob.com",
+    telefone: "1800000000"
+};
 
-const seedAdmin = { id: 901, nome: "Administrador GOJOB", email: "admin@gojob.com", senha: "admin123", telefone: "1800000000" };
+/**
+ * Carrega todas as categorias reais cadastradas no PostgreSQL via API C#
+ */
+async function carregarSeedCategorias() {
+    try {
+        const res = await fetch('/api/categorias');
+        if (res.ok) {
+            const dados = await res.json();
+            // Mapeia e instancia os objetos de Categoria normalizando as propriedades
+            seedCategorias = dados.map(c => new Categoria(
+                c.id ?? c.Id,
+                c.nome ?? c.Nome,
+                c.descricao ?? c.Descricao ?? "",
+                c.ativa ?? c.Ativa ?? true
+            ));
+        }
+    } catch (e) {
+        console.error("Erro ao carregar categorias da API:", e);
+    }
+    return seedCategorias;
+}
 
-const seedAvaliacoes = [
-    { id: 1, idCliente: 201, idProfissional: 101, nota: 5, comentario: "Excelente serviço, super pontual e organizado.", dataHora: "2026-08-02" },
-    { id: 2, idCliente: 202, idProfissional: 101, nota: 4, comentario: "Bom trabalho, recomendo.", dataHora: "2026-08-14" },
-    { id: 3, idCliente: 201, idProfissional: 102, nota: 5, comentario: "Deixou a casa impecável!", dataHora: "2026-08-20" },
-    { id: 4, idCliente: 202, idProfissional: 103, nota: 3, comentario: "Serviço ok, mas atrasou um pouco.", dataHora: "2026-08-25" },
-];
-
+/**
+ * Carrega a lista de profissionais cadastrados no banco de dados via API C#
+ */
+async function carregarSeedProfissionais() {
+    try {
+        const res = await fetch('/api/profissionais');
+        if (res.ok) {
+            const dados = await res.json();
+            seedProfissionais = dados.map(p => ({
+                id: p.id ?? p.Id,
+                nome: p.nome ?? p.Nome,
+                email: p.email ?? p.Email,
+                telefone: p.telefone ?? p.Telefone ?? "",
+                categorias: p.categoriasIds ?? p.categorias ?? [],
+                endereco: {
+                    logradouro: p.logradouro ?? "",
+                    bairro: p.bairro ?? "",
+                    cidade: p.cidade ?? "",
+                    estado: p.estado ?? ""
+                },
+                reputacaoMedia: p.avaliacaoMedia ?? p.reputacaoMedia ?? 0,
+                totalAvaliacoes: p.totalAvaliacoes ?? 0,
+                ativo: p.ativo ?? true
+            }));
+        }
+    } catch (e) {
+        console.error("Erro ao carregar profissionais da API:", e);
+    }
+    return seedProfissionais;
+}
 /* ---------------------------------------------------------------------
    4. "REPOSITORIES" EM MEMÓRIA (troque por chamadas HTTP ao IRepository<T> real)
 --------------------------------------------------------------------- */
@@ -292,15 +352,23 @@ class UsuarioService {
 
 class CategoriaService {
     async listarAtivas() {
-        const res = await fetch(`${API_BASE_URL}/categorias?ativa=true`);
-        if (!res.ok) throw new GojobException("Erro ao carregar categorias ativas.");
-        return await res.json();
+        // Busca todas do backend e filtra client-side para garantir que exiba todas as ativas (antigas e novas)
+        const categorias = await this.listarTodas();
+        return categorias.filter(c => c.ativa !== false);
     }
 
     async listarTodas() {
         const res = await fetch(`${API_BASE_URL}/categorias`);
         if (!res.ok) throw new GojobException("Erro ao carregar categorias.");
-        return await res.json();
+        const dados = await res.json();
+
+        // Normaliza as propriedades de cada categoria (suporta id/Id, nome/Nome, ativa/Ativa)
+        return dados.map(c => ({
+            id: c.id ?? c.Id,
+            nome: c.nome ?? c.Nome,
+            descricao: c.descricao ?? c.Descricao ?? "",
+            ativa: c.ativa ?? c.Ativa ?? true
+        }));
     }
 
     async obterTodas() {
@@ -308,7 +376,7 @@ class CategoriaService {
     }
 
     async criarCategoria(nome, descricao, solicitante) {
-        if (solicitante && solicitante.tipo !== "ADMIN") {
+        if (solicitante && (solicitante.tipo !== "ADMIN" && solicitante.tipo !== "ADMINISTRADOR")) {
             throw new OperacaoNaoPermitidaException();
         }
         if (!nome || !nome.trim()) {
@@ -333,7 +401,7 @@ class CategoriaService {
     }
 
     async editarCategoria(id, nome, descricao, solicitante) {
-        if (solicitante && solicitante.tipo !== "ADMIN") {
+        if (solicitante && (solicitante.tipo !== "ADMIN" && solicitante.tipo !== "ADMINISTRADOR")) {
             throw new OperacaoNaoPermitidaException();
         }
 
@@ -358,7 +426,7 @@ class CategoriaService {
     }
 
     async inativarCategoria(id, solicitante) {
-        if (solicitante && solicitante.tipo !== "ADMIN") {
+        if (solicitante && (solicitante.tipo !== "ADMIN" && solicitante.tipo !== "ADMINISTRADOR")) {
             throw new OperacaoNaoPermitidaException();
         }
 
@@ -374,7 +442,6 @@ class CategoriaService {
         return await res.json();
     }
 }
-
 class ProfissionalService {
     async buscarPorId(id) {
         const res = await fetch(`${API_BASE_URL}/profissionais/${id}`);
@@ -569,14 +636,32 @@ function gojobApp() {
 
         /* ---------------- ciclo de vida ---------------- */
         async init() {
-            // Carrega a sessão de forma assíncrona antes de renderizar a interface
+            // 1. PRIMEIRO: Restaura a sessão imediatamente para o usuário continuar logado após o F5
             await this.atualizarSessaoUI();
 
+            // 2. SEGUNDO: Carrega as categorias e profissionais reais da API C# sem afetar o estado da sessão
+            try {
+                if (typeof carregarSeedCategorias === 'function') {
+                    this.categorias = await carregarSeedCategorias();
+                    this.categoriasDisponiveis = this.categorias.filter(c =>
+                        typeof c.estaAtiva === 'function' ? c.estaAtiva() : c.ativa !== false
+                    );
+                }
+                if (typeof carregarSeedProfissionais === 'function') {
+                    this.profissionais = await carregarSeedProfissionais();
+                }
+            } catch (e) {
+                console.error("Erro ao carregar dados iniciais da API:", e);
+            }
+
+            // 3. TERCEIRO: Renderiza os ícones Lucide no DOM após a inicialização
             this.$nextTick(() => {
-                if (typeof lucide !== 'undefined') {
+                if (typeof lucide !== 'undefined' && lucide.createIcons) {
                     lucide.createIcons();
                 }
             });
+        
+        
 
             // Observadores para re-renderizar os ícones do Lucide
             this.$watch("view", (novaView) => {
