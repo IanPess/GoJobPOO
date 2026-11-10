@@ -173,7 +173,10 @@ namespace GoJob.Controllers
             return Ok(new { mensagem = "Perfil atualizado com sucesso!" });
         }
 
+        [HttpDelete("{id}")]
         [HttpDelete("{id}/inativar")]
+        [HttpPatch("{id}/inativar")]
+        [HttpPut("{id}/inativar")]
         public async Task<IActionResult> Inativar(int id)
         {
             var profissional = await _context.Usuarios
@@ -186,6 +189,7 @@ namespace GoJob.Controllers
                 return NotFound(new { mensagem = "Profissional não encontrado." });
             }
 
+            // Anonimiza os dados do perfil
             profissional.Nome = "Usuário Inativo";
             profissional.Email = $"inativo_{profissional.Id}_{Guid.NewGuid().ToString()[..4]}@gojob.local";
             profissional.Telefone = string.Empty;

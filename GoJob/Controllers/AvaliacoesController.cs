@@ -45,6 +45,7 @@ public class AvaliacoesController : ControllerBase
             return BadRequest(new { mensagem = "Cliente e Profissional válidos são obrigatórios." });
         }
 
+        // RN09: Proibição de autoavaliação
         if (dto.ClienteId == dto.ProfissionalId)
         {
             return BadRequest(new { mensagem = "Não é possível avaliar a si mesmo." });
@@ -59,10 +60,20 @@ public class AvaliacoesController : ControllerBase
             Comentario = dto.Comentario ?? string.Empty
         };
 
-        // Validação encapsulada dentro da própria entidade Avaliacao
+        // RN06: Validação encapsulada dentro da própria entidade Avaliacao
         if (!avaliacao.ValidarNota())
         {
             return BadRequest(new { mensagem = "A nota deve ser entre 1 e 5 estrelas." });
+        }
+
+        // RF08 / RN08: Cliente não pode avaliar o mesmo profissional mais de uma vez
+        var jaAvaliou = await _context.Avaliacoes
+            .AsNoTracking()
+            .AnyAsync(a => a.ClienteId == dto.ClienteId && a.ProfissionalId == dto.ProfissionalId);
+
+        if (jaAvaliou)
+        {
+            return BadRequest(new { mensagem = "Você já avaliou este profissional anteriormente." });
         }
 
         var cliente = await _context.Usuarios.FindAsync(dto.ClienteId);
