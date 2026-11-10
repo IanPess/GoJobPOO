@@ -201,8 +201,8 @@
     <main class="pt-16">
 
         <!-- =========================================================
-             VIEW 1 — HERO + BUSCA RÁPIDA
-        ========================================================= -->
+         VIEW 1 — HERO + BUSCA RÁPIDA
+    ========================================================= -->
         <section x-show="view === 'home'" x-cloak id="hero-section">
             <div class="mx-auto max-w-6xl px-5 sm:px-8 pt-16 pb-14 sm:pt-24 sm:pb-20">
                 <div class="max-w-2xl">
@@ -280,8 +280,8 @@
         </section>
 
         <!-- =========================================================
-             VIEW 2 — RESULTADOS DA BUSCA
-        ========================================================= -->
+         VIEW 2 — RESULTADOS DA BUSCA
+    ========================================================= -->
         <section x-show="view === 'resultados'" x-cloak class="mx-auto max-w-6xl px-5 sm:px-8 pt-10 pb-20 min-h-[60vh]">
             <div class="flex items-start justify-between gap-4 mb-8">
                 <div>
@@ -338,8 +338,8 @@
         </section>
 
         <!-- =========================================================
-             VIEW 4 — DASHBOARD DO PROFISSIONAL (RF06, RF07, RN10)
-        ========================================================= -->
+         VIEW 4 — DASHBOARD DO PROFISSIONAL (RF06, RF07, RN10)
+    ========================================================= -->
         <section x-show="view === 'dashboard'" x-cloak class="mx-auto max-w-3xl px-5 sm:px-8 pt-10 pb-24 min-h-[60vh]">
             <h2 class="font-display font-700 text-2xl text-bone-100">Configurar meu perfil profissional</h2>
             <p class="text-sm text-bone-200/60 mt-1 mb-8">Escolha até 3 categorias de atuação e informe onde você atende.</p>
@@ -406,8 +406,11 @@
         </section>
 
         <!-- =========================================================
-             VIEW 5 — PAINEL ADMINISTRADOR (RF03–RF05, RF12)
-        ========================================================= -->
+         VIEW 5 — PAINEL ADMINISTRADOR (RF03–RF05, RF12)
+    ========================================================= -->
+        <!-- =========================================================
+         VIEW 5 — PAINEL ADMINISTRADOR (RF03–RF05, RF12)
+    ========================================================= -->
         <section x-show="view === 'admin'" x-cloak class="mx-auto max-w-4xl px-5 sm:px-8 pt-10 pb-24 min-h-[60vh]">
             <div class="flex items-center justify-between mb-8">
                 <div>
@@ -430,16 +433,16 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <template x-for="cat in categorias" :key="'admin-'+cat.id">
+                        <template x-for="cat in categorias" :key="'admin-'+(cat.id || cat.Id)">
                             <tr class="border-b border-ink-800/70 last:border-0">
-                                <td class="px-5 py-3.5 font-medium text-bone-100" x-text="cat.nome"></td>
-                                <td class="px-5 py-3.5 text-bone-200/60 hidden sm:table-cell truncate max-w-[240px]" x-text="cat.descricao"></td>
+                                <td class="px-5 py-3.5 font-medium text-bone-100" x-text="cat.nome || cat.Nome"></td>
+                                <td class="px-5 py-3.5 text-bone-200/60 hidden sm:table-cell truncate max-w-[240px]" x-text="cat.descricao || cat.Descricao"></td>
                                 <td class="px-5 py-3.5">
                                     <span class="text-[11px] px-2.5 py-1 rounded-full border" :class="cat.ativa ? 'border-moss-500/40 text-moss-300' : 'border-ink-700 text-bone-200/40'" x-text="cat.ativa ? 'Ativa' : 'Inativa'"></span>
                                 </td>
                                 <td class="px-5 py-3.5 text-right space-x-3">
-                                    <button @click="abrirModalCategoria(cat.id)" class="text-bone-200/60 hover:text-moss-300"><i data-lucide="pencil" class="w-4 h-4 inline"></i></button>
-                                    <button @click="inativarCategoria(cat.id)" x-show="cat.ativa" class="text-bone-200/60 hover:text-clay-400"><i data-lucide="ban" class="w-4 h-4 inline"></i></button>
+                                    <button @click="abrirModalCategoria(cat.id || cat.Id)" class="text-bone-200/60 hover:text-moss-300"><i data-lucide="pencil" class="w-4 h-4 inline"></i></button>
+                                    <button @click="inativarCategoria(cat.id || cat.Id)" class="text-bone-200/60 hover:text-clay-400"><i data-lucide="ban" class="w-4 h-4 inline"></i></button>
                                 </td>
                             </tr>
                         </template>

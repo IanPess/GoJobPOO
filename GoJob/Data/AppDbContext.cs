@@ -22,38 +22,34 @@ namespace GoJob.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // 1. Mapeamento de Herança (TPH - Table Per Hierarchy)[cite: 1, 2]
+            // Mapeamento de Herança (TPH - Table Per Hierarchy)
+            // Mantido "ADMIN" para bater com os dados existentes no banco
             modelBuilder.Entity<Usuario>()
                 .HasDiscriminator<string>("TipoUsuario")
                 .HasValue<Cliente>("Cliente")
                 .HasValue<Profissional>("Profissional")
-                .HasValue<Administrador>("Administrador"); // Padronizado com o construtor da classe
+                .HasValue<Administrador>("ADMIN");
 
-            // 2. Mapeamento da navegação encapsulada de Profissional (private set)
-            modelBuilder.Entity<Profissional>()
-                .HasMany(p => p.Categorias)
-                .WithMany(); // Se for N:N simples sem entidade de junção explícita
-
-            // 3. Relacionamento 1 para 1: Usuario <-> Endereco[cite: 2]
+            // Relacionamento 1 para 1: Usuario <-> Endereco
             modelBuilder.Entity<Usuario>()
                 .HasOne(u => u.Endereco)
                 .WithOne(e => e.Usuario)
                 .HasForeignKey<Endereco>(e => e.UsuarioId)
-                .OnDelete(DeleteBehavior.Cascade); //[cite: 2]
+                .OnDelete(DeleteBehavior.Cascade);
 
-            // 4. Relacionamento 1 para N: Cliente <-> Avaliacao[cite: 2]
+            // Relacionamento 1 para N: Cliente <-> Avaliacao
             modelBuilder.Entity<Avaliacao>()
                 .HasOne(a => a.Cliente)
                 .WithMany(c => c.AvaliacoesRealizadas)
                 .HasForeignKey(a => a.ClienteId)
-                .OnDelete(DeleteBehavior.Restrict); //[cite: 2]
+                .OnDelete(DeleteBehavior.Restrict);
 
-            // 5. Relacionamento 1 para N: Profissional <-> Avaliacao[cite: 2]
+            // Relacionamento 1 para N: Profissional <-> Avaliacao
             modelBuilder.Entity<Avaliacao>()
                 .HasOne(a => a.Profissional)
                 .WithMany(p => p.AvaliacoesRecebidas)
                 .HasForeignKey(a => a.ProfissionalId)
-                .OnDelete(DeleteBehavior.Restrict); //[cite: 2]
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

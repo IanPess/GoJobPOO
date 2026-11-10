@@ -995,13 +995,20 @@ function gojobApp() {
             try {
                 const resCat = await fetch('/api/categorias');
                 if (resCat.ok) {
-                    this.categorias = await resCat.json();
+                    const dados = await resCat.json();
+                    // Normaliza as propriedades garantindo id, nome, descricao e ativa
+                    this.categorias = dados.map(c => ({
+                        id: c.id ?? c.Id,
+                        nome: c.nome ?? c.Nome,
+                        descricao: c.descricao ?? c.Descricao ?? "",
+                        ativa: c.ativa ?? c.Ativa ?? true
+                    }));
                 }
             } catch (e) {
                 console.error("Erro ao carregar categorias no painel admin:", e);
             }
 
-            // 2. Carrega os profissionais do backend C# para a tabela inferior (RF12)
+            // 2. Carrega os profissionais do backend C#
             try {
                 const resProf = await fetch('/api/profissionais');
                 if (resProf.ok) {
@@ -1010,12 +1017,25 @@ function gojobApp() {
             } catch (e) {
                 console.error("Erro ao carregar profissionais no painel admin:", e);
             }
+
+            // 3. RE-RENDERIZA OS ÍCONES LUCIDE NA TELA
+            this.$nextTick(() => {
+                if (typeof lucide !== 'undefined' && lucide.createIcons) {
+                    lucide.createIcons();
+                }
+            });
         },
 
         abrirModalCategoria(id = null) {
             if (id) {
-                const cat = this.categorias.find((c) => c.id === id);
-                this.categoriaModal = { open: true, id, nome: cat ? cat.nome : "", descricao: cat ? cat.descricao : "" };
+                // Suporta busca por c.id ou c.Id
+                const cat = this.categorias.find((c) => (c.id ?? c.Id) === id);
+                this.categoriaModal = {
+                    open: true,
+                    id: id,
+                    nome: cat ? (cat.nome ?? cat.Nome) : "",
+                    descricao: cat ? (cat.descricao ?? cat.Descricao) : ""
+                };
             } else {
                 this.categoriaModal = { open: true, id: null, nome: "", descricao: "" };
             }
@@ -1037,7 +1057,7 @@ function gojobApp() {
                     toastSucesso("Categoria criada.");
                 }
                 this.categoriaModal.open = false;
-                await this.carregarDadosAdmin(); // Atualiza as tabelas na tela
+                await this.carregarDadosAdmin(); // Atualiza a lista padronizada na tela
             } catch (e) {
                 toastErro(e.message || "Erro ao salvar categoria.");
             }
