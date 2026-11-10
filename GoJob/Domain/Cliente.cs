@@ -1,6 +1,6 @@
 ﻿namespace GoJob.Domain
 {
-    public class Cliente:Usuario
+    public class Cliente : Usuario
     {
         public Cliente()
         {
@@ -9,5 +9,11 @@
 
         // Lista de avaliações que este cliente fez para profissionais
         public ICollection<Avaliacao> AvaliacoesRealizadas { get; set; } = new List<Avaliacao>();
+
+        // Implementação polimórfica obrigatória do método abstrato da classe Usuario
+        public override string ObterResumoPerfil()
+        {
+            return $"Cliente: {Nome} | Avaliações Realizadas: {AvaliacoesRealizadas.Count}";
+        }
     }
 }

@@ -1,6 +1,6 @@
 ﻿namespace GoJob.Domain
 {
-    public class Usuario
+    public abstract class Usuario
     {
         public int Id { get; set; }
         public string Nome { get; set; } = string.Empty;
@@ -18,5 +18,8 @@
             return Email.Equals(emailDigitado, StringComparison.OrdinalIgnoreCase) &&
                    SenhaHash == senhaHashDigitada;
         }
+
+        // Método abstrato exigido para garantir Abstração e Polimorfismo
+        public abstract string ObterResumoPerfil();
     }
 }

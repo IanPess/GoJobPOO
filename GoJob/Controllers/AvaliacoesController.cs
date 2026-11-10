@@ -30,7 +30,7 @@ public class AvaliacoesController : ControllerBase
                 nota = a.Nota,
                 comentario = a.Comentario,
                 nomeCliente = a.Cliente != null ? a.Cliente.Nome : "Cliente",
-                dataCriacao = DateTime.Now.ToString("dd/MM/yyyy")
+                dataCriacao = a.DataHora.ToString("dd/MM/yyyy")
             })
             .ToListAsync();
 
@@ -50,22 +50,7 @@ public class AvaliacoesController : ControllerBase
             return BadRequest(new { mensagem = "Não é possível avaliar a si mesmo." });
         }
 
-        if (dto.Nota < 1 || dto.Nota > 5)
-        {
-            return BadRequest(new { mensagem = "A nota deve ser entre 1 e 5 estrelas." });
-        }
-
-        var cliente = await _context.Usuarios.FindAsync(dto.ClienteId);
-        var profissional = await _context.Usuarios
-            .OfType<Profissional>()
-            .FirstOrDefaultAsync(p => p.Id == dto.ProfissionalId);
-
-        if (cliente == null || profissional == null)
-        {
-            return BadRequest(new { mensagem = "Cliente ou profissional não encontrado." });
-        }
-
-        // 1. Cria e grava a avaliação no Supabase
+        // Instancia a entidade primeiro para usar o encapsulamento
         var avaliacao = new Avaliacao
         {
             ClienteId = dto.ClienteId,
@@ -74,20 +59,30 @@ public class AvaliacoesController : ControllerBase
             Comentario = dto.Comentario ?? string.Empty
         };
 
+        // Validação encapsulada dentro da própria entidade Avaliacao
+        if (!avaliacao.ValidarNota())
+        {
+            return BadRequest(new { mensagem = "A nota deve ser entre 1 e 5 estrelas." });
+        }
+
+        var cliente = await _context.Usuarios.FindAsync(dto.ClienteId);
+        var profissional = await _context.Usuarios
+            .OfType<Profissional>()
+            .Include(p => p.AvaliacoesRecebidas)
+            .FirstOrDefaultAsync(p => p.Id == dto.ProfissionalId);
+
+        if (cliente == null || profissional == null)
+        {
+            return BadRequest(new { mensagem = "Cliente ou profissional não encontrado." });
+        }
+
+        // 1. Cria e grava a avaliação no banco
         _context.Avaliacoes.Add(avaliacao);
         await _context.SaveChangesAsync();
 
-        // 2. RN04: Recalcula a Reputação Média com base em todas as avaliações salvas
-        var notas = await _context.Avaliacoes
-            .Where(a => a.ProfissionalId == dto.ProfissionalId)
-            .Select(a => a.Nota)
-            .ToListAsync();
-
-        if (notas.Any())
-        {
-            profissional.ReputacaoMedia = (float)notas.Average();
-            await _context.SaveChangesAsync();
-        }
+        // 2. RN04: Recalcula a Reputação Média usando o método de domínio da entidade Profissional
+        profissional.RecalcularReputacao();
+        await _context.SaveChangesAsync();
 
         return Ok(new { mensagem = "Avaliação registrada e reputação atualizada com sucesso!", id = avaliacao.Id });
     }
